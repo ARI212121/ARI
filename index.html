@@ -2,7 +2,8 @@
 <html lang="he" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>Govmap Geocoder - Local</title>
+    <title>Govmap Geocoder - Official API</title>
+    <script src="https://www.govmap.gov.il/govmap/api/govmap.api.js" defer onload="apiLoaded()"></script>
     <style>
         body { font-family: Arial, sans-serif; background: #f4f4f9; color: #333; margin: 0; padding: 20px; }
         .container { max-width: 600px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -14,22 +15,27 @@
         .log-entry { margin-bottom: 4px; }
         .error { color: #ff5252; }
         .warning { color: #ffd54f; }
+        #mapDiv { display: none; width: 10px; height: 10px; } /* מפה נסתרת שחובה לטעון כדי להפעיל חיפושים */
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>ממשק המרת כתובות - Govmap מול Google Sheets</h2>
+    <h2>המרת כתובות באמצעות ה-API הרשמי של Govmap</h2>
     
-    <label>כתובת הפריסה של הסקריפט (Web App URL):</label>
+    <label>מפתח ה-API שלך (Token מגוב מפס):</label>
+    <input type="text" id="apiToken" placeholder="הדבק כאן את הטוקן">
+
+    <label>כתובת הפריסה של גוגל סקריפט (Web App URL):</label>
     <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/.../exec">
     
     <label>מזהה קובץ ה-Google Sheets (ID):</label>
     <input type="text" id="sheetId" value="1Px1gCZT3BPgeYeNdTQQ6PbOQiGH6zx7wk5qiKWV0eFI">
     
-    <button id="startBtn" onclick="startProcess()">התחל המרה</button>
+    <button id="startBtn" onclick="initMapAndStart()" disabled>טוען מערכת מפות...</button>
     
     <div id="logArea"></div>
+    <div id="mapDiv"></div>
 </div>
 
 <script>
@@ -37,6 +43,12 @@
     var currentIndex = 0;
     var scriptUrl = "";
     var sheetId = "";
+
+    // מופעל כשהקובץ govmap.api.js סיים להיטען
+    function apiLoaded() {
+        document.getElementById('startBtn').innerText = "התחל המרה";
+        document.getElementById('startBtn').disabled = false;
+    }
 
     function log(msg, type) {
         var logArea = document.getElementById('logArea');
@@ -47,45 +59,74 @@
         logArea.scrollTop = logArea.scrollHeight;
     }
 
-    // פונקציית הקסם: עוקפת את חסימת ה-CORS של הדפדפן באמצעות JSONP
-    function fetchGovmapJSONP(url) {
-        return new Promise((resolve, reject) => {
-            // יצירת שם פונקציה ייחודי לכל בקשה
-            let callbackName = 'govmapCallback_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
-            
-            // הגדרת הפונקציה שתופעל כשהשרת יחזיר תשובה
-            window[callbackName] = function(data) {
-                delete window[callbackName];
-                document.body.removeChild(script);
-                resolve(data);
-            };
+    // אלגוריתם מתמטי להמרת קואורדינטות רשת ישראל (ITM) לקואורדינטות גלובליות (WGS84)
+    function itmToWgs84(easting, northing) {
+        var a = 6378137.0; 
+        var e = 0.0818191908426; 
+        var lat0 = 31.7340968 * Math.PI / 180;
+        var lon0 = 35.2045169 * Math.PI / 180;
+        var k0 = 1.0000067;
+        var falseEasting = 219529.584;
+        var falseNorthing = 626907.390;
 
-            // יצירת תגית סקריפט שתפנה לשרת (פעולה זו לא נחסמת על ידי CORS)
-            let script = document.createElement('script');
-            script.src = url + "&callback=" + callbackName;
-            
-            script.onerror = function() {
-                delete window[callbackName];
-                document.body.removeChild(script);
-                reject(new Error('Failed to fetch (JSONP Error)'));
-            };
+        var x = easting - falseEasting;
+        var y = northing - falseNorthing;
 
-            document.body.appendChild(script);
-        });
+        var M0 = a * ((1 - e*e/4 - 3*Math.pow(e,4)/64 - 5*Math.pow(e,6)/256) * lat0 
+               - (3*e*e/8 + 3*Math.pow(e,4)/32 + 45*Math.pow(e,6)/1024) * Math.sin(2*lat0) 
+               + (15*Math.pow(e,4)/256 + 45*Math.pow(e,6)/1024) * Math.sin(4*lat0) 
+               - (35*Math.pow(e,6)/3072) * Math.sin(6*lat0));
+
+        var M = y / k0 + M0;
+        var mu = M / (a * (1 - e*e/4 - 3*Math.pow(e,4)/64 - 5*Math.pow(e,6)/256));
+        var e1 = (1 - Math.sqrt(1 - e*e)) / (1 + Math.sqrt(1 - e*e));
+
+        var lat1 = mu + (3*e1/2 - 27*Math.pow(e1,3)/32) * Math.sin(2*mu) 
+                 + (21*Math.pow(e1,2)/16 - 55*Math.pow(e1,4)/32) * Math.sin(4*mu) 
+                 + (151*Math.pow(e1,3)/96) * Math.sin(6*mu);
+
+        var N1 = a / Math.sqrt(1 - e*e * Math.pow(Math.sin(lat1),2));
+        var T1 = Math.pow(Math.tan(lat1),2);
+        var C1 = e * e * Math.pow(Math.cos(lat1),2) / (1 - e*e);
+        var R1 = a * (1 - e*e) / Math.pow(1 - e*e * Math.pow(Math.sin(lat1),2), 1.5);
+        var D = x / (N1 * k0);
+
+        var lat = lat1 - (N1 * Math.tan(lat1) / R1) * (Math.pow(D,2)/2 - (5 + 3*T1 + 10*C1 - 4*C1*C1 - 9*e*e)*Math.pow(D,4)/24 + (61 + 90*T1 + 298*C1 + 45*T1*T1 - 252*e*e - 3*C1*C1)*Math.pow(D,6)/720);
+        var lon = lon0 + (D - (1 + 2*T1 + C1)*Math.pow(D,3)/6 + (5 - 2*C1 + 28*T1 - 3*C1*C1 + 8*e*e + 24*T1*T1)*Math.pow(D,5)/120) / Math.cos(lat1);
+
+        return { lat: lat * 180 / Math.PI, lng: lon * 180 / Math.PI };
     }
 
-    async function startProcess() {
+    async function initMapAndStart() {
+        var token = document.getElementById('apiToken').value.trim();
         scriptUrl = document.getElementById('scriptUrl').value.trim();
         sheetId = document.getElementById('sheetId').value.trim();
 
-        if (!scriptUrl || !sheetId) {
+        if (!token || !scriptUrl || !sheetId) {
             alert("נא למלא את כל השדות!");
             return;
         }
 
         document.getElementById('startBtn').disabled = true;
-        log("מתחבר לגוגל שיטס למשיכת נתונים...", "");
+        log("מאתחל את מנוע המפה של גוב מפס עם הטוקן שלך...", "");
 
+        try {
+            // ה-API דורש יצירת מפה (גם אם היא נסתרת) כדי להשתמש בפונקציות החיפוש
+            govmap.createMap('mapDiv', {
+                token: token,
+                visibleLayers: []
+            });
+            
+            // המתנה קלה שהמפה הנסתרת תסיים לעלות מול השרתים
+            setTimeout(fetchAddressesFromGoogle, 1500);
+        } catch(e) {
+            log("שגיאה באתחול. ודא שאתה מריץ דרך שרת והטוקן מאושר: " + e.message, "error");
+            document.getElementById('startBtn').disabled = false;
+        }
+    }
+
+    async function fetchAddressesFromGoogle() {
+        log("מתחבר לגוגל שיטס למשיכת הכתובות...", "");
         try {
             let url = `${scriptUrl}?action=getAddresses&sheetId=${sheetId}`;
             let response = await fetch(url);
@@ -98,7 +139,7 @@
                     document.getElementById('startBtn').disabled = false;
                     return;
                 }
-                log(`נמשכו ${addresses.length} כתובות. מתחיל סריקה מול Govmap...`, "");
+                log(`נמשכו ${addresses.length} כתובות. מתחיל סריקה הרשמית...`, "");
                 currentIndex = 0;
                 processNext();
             } else {
@@ -121,44 +162,52 @@
         let item = addresses[currentIndex];
         log(`[Row ${item.row}] מחפש: ${item.addressStr}`);
 
-        // הוספנו את המבנה של בקשת ה-API כפי שהיה, הפונקציה שלנו כבר תוסיף את ה-callback
-        let govmapUrl = `https://ags.govmap.gov.il/Locate/Find?query=${encodeURIComponent(item.addressStr)}&outFields=*&outSR=4326&f=json`;
-
         try {
-            // שימוש בפונקציית ה-JSONP החדשה במקום ב-fetch הרגיל
-            let govData = await fetchGovmapJSONP(govmapUrl);
+            // קריאה לפונקציה המובנית של גוב מפס
+            govmap.geocode({ keyword: item.addressStr })
+                .then(async function(response) {
+                    // ה-API מחזיר את הנתונים בתוך מערך data
+                    if (response && response.data && response.data.length > 0) {
+                        let x = response.data[0].X; // קואורדינטת X (ITM)
+                        let y = response.data[0].Y; // קואורדינטת Y (ITM)
+                        
+                        // המרה לגלובלי (WGS84)
+                        let coords = itmToWgs84(x, y);
+                        let lat = coords.lat.toFixed(6);
+                        let lng = coords.lng.toFixed(6);
 
-            let lat = "", lng = "", errorMsg = "";
-
-            if (govData && govData.features && govData.features.length > 0) {
-                lng = govData.features[0].geometry.x;
-                lat = govData.features[0].geometry.y;
-                log(`  -> נמצאו קואורדינטות! Lat: ${lat}, Lng: ${lng}`, "");
-            } else {
-                errorMsg = "לא נמצאו תוצאות ב-Govmap";
-                log(`  -> ${errorMsg}`, "warning");
-            }
-
-            // שמירת התוצאות לגוגל שיטס
-            let saveUrl = `${scriptUrl}?action=saveCoordinate&sheetId=${sheetId}&row=${item.row}&lat=${lat}&lng=${lng}&errorMsg=${encodeURIComponent(errorMsg)}`;
-            let saveResponse = await fetch(saveUrl);
-            let saveResult = await saveResponse.json();
-
-            if (saveResult.status !== "success") {
-                log(`  -> שגיאה בשמירה לגוגל: ${saveResult.message}`, "error");
-            }
+                        log(`  -> נמצא ב-Govmap! Lat: ${lat}, Lng: ${lng}`, "");
+                        await saveToGoogle(item.row, lat, lng, "");
+                    } else {
+                        log(`  -> לא נמצאו תוצאות עבור כתובת זו`, "warning");
+                        await saveToGoogle(item.row, "", "", "לא נמצאו תוצאות");
+                    }
+                    
+                    currentIndex++;
+                    setTimeout(processNext, 400); // השהיה קלה למניעת חסימות
+                })
+                .catch(async function(err) {
+                    log(`  -> שגיאה משרת גוב מפס בחיפוש זה`, "error");
+                    await saveToGoogle(item.row, "", "", "שגיאת Govmap API");
+                    currentIndex++;
+                    setTimeout(processNext, 400);
+                });
 
         } catch (err) {
             log(`  -> שגיאה: ${err.message}`, "error");
-            try {
-                let saveUrl = `${scriptUrl}?action=saveCoordinate&sheetId=${sheetId}&row=${item.row}&lat=&lng=&errorMsg=${encodeURIComponent(err.message)}`;
-                await fetch(saveUrl);
-            } catch (e) {}
+            await saveToGoogle(item.row, "", "", err.message);
+            currentIndex++;
+            setTimeout(processNext, 400);
         }
+    }
 
-        // השהיה קצרה למניעת עומס
-        currentIndex++;
-        setTimeout(processNext, 300);
+    async function saveToGoogle(row, lat, lng, errorMsg) {
+        try {
+            let saveUrl = `${scriptUrl}?action=saveCoordinate&sheetId=${sheetId}&row=${row}&lat=${lat}&lng=${lng}&errorMsg=${encodeURIComponent(errorMsg)}`;
+            await fetch(saveUrl);
+        } catch(e) {
+            log(`  -> שגיאה בשמירה לגיליון: ${e.message}`, "error");
+        }
     }
 </script>
 
