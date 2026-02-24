@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>Govmap Geocoder - Local</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f9; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        label { font-weight: bold; display: block; margin-top: 15px; margin-bottom: 5px; }
+        input[type="text"] { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background-color: #0056b3; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+        button:disabled { background-color: #aaa; cursor: not-allowed; }
+        #logArea { margin-top: 20px; font-size: 14px; background: #222; color: #0f0; height: 350px; overflow-y: auto; padding: 10px; border-radius: 4px; text-align: left; direction: ltr; font-family: monospace; }
+        .log-entry { margin-bottom: 4px; }
+        .error { color: #ff5252; }
+        .warning { color: #ffd54f; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>ממשק המרת כתובות - Govmap מול Google Sheets</h2>
+    
+    <label>כתובת הפריסה של הסקריפט (Web App URL):</label>
+    <input type="text" id="scriptUrl" placeholder="https://script.google.com/macros/s/.../exec">
+    
+    <label>מזהה קובץ ה-Google Sheets (ID):</label>
+    <input type="text" id="sheetId" value="1Px1gCZT3BPgeYeNdTQQ6PbOQiGH6zx7wk5qiKWV0eFI">
+    
+    <button id="startBtn" onclick="startProcess()">התחל המרה</button>
+    
+    <div id="logArea"></div>
+</div>
+
+<script>
+    var addresses = [];
+    var currentIndex = 0;
+    var scriptUrl = "";
+    var sheetId = "";
+
+    function log(msg, type) {
+        var logArea = document.getElementById('logArea');
+        var span = document.createElement('div');
+        span.className = 'log-entry ' + (type || '');
+        span.textContent = msg;
+        logArea.appendChild(span);
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    // פונקציית הקסם: עוקפת את חסימת ה-CORS של הדפדפן באמצעות JSONP
+    function fetchGovmapJSONP(url) {
+        return new Promise((resolve, reject) => {
+            // יצירת שם פונקציה ייחודי לכל בקשה
+            let callbackName = 'govmapCallback_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+            
+            // הגדרת הפונקציה שתופעל כשהשרת יחזיר תשובה
+            window[callbackName] = function(data) {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                resolve(data);
+            };
+
+            // יצירת תגית סקריפט שתפנה לשרת (פעולה זו לא נחסמת על ידי CORS)
+            let script = document.createElement('script');
+            script.src = url + "&callback=" + callbackName;
+            
+            script.onerror = function() {
+                delete window[callbackName];
+                document.body.removeChild(script);
+                reject(new Error('Failed to fetch (JSONP Error)'));
+            };
+
+            document.body.appendChild(script);
+        });
+    }
+
+    async function startProcess() {
+        scriptUrl = document.getElementById('scriptUrl').value.trim();
+        sheetId = document.getElementById('sheetId').value.trim();
+
+        if (!scriptUrl || !sheetId) {
+            alert("נא למלא את כל השדות!");
+            return;
+        }
+
+        document.getElementById('startBtn').disabled = true;
+        log("מתחבר לגוגל שיטס למשיכת נתונים...", "");
+
+        try {
+            let url = `${scriptUrl}?action=getAddresses&sheetId=${sheetId}`;
+            let response = await fetch(url);
+            let result = await response.json();
+
+            if (result.status === "success") {
+                addresses = result.data;
+                if (addresses.length === 0) {
+                    log("לא נמצאו כתובות בקובץ.", "warning");
+                    document.getElementById('startBtn').disabled = false;
+                    return;
+                }
+                log(`נמשכו ${addresses.length} כתובות. מתחיל סריקה מול Govmap...`, "");
+                currentIndex = 0;
+                processNext();
+            } else {
+                log("שגיאה ממערכת גוגל: " + result.message, "error");
+                document.getElementById('startBtn').disabled = false;
+            }
+        } catch (err) {
+            log("שגיאת תקשורת מול גוגל סקריפט: " + err.message, "error");
+            document.getElementById('startBtn').disabled = false;
+        }
+    }
+
+    async function processNext() {
+        if (currentIndex >= addresses.length) {
+            log("--- התהליך הסתיים בהצלחה! ---", "");
+            document.getElementById('startBtn').disabled = false;
+            return;
+        }
+
+        let item = addresses[currentIndex];
+        log(`[Row ${item.row}] מחפש: ${item.addressStr}`);
+
+        // הוספנו את המבנה של בקשת ה-API כפי שהיה, הפונקציה שלנו כבר תוסיף את ה-callback
+        let govmapUrl = `https://ags.govmap.gov.il/Locate/Find?query=${encodeURIComponent(item.addressStr)}&outFields=*&outSR=4326&f=json`;
+
+        try {
+            // שימוש בפונקציית ה-JSONP החדשה במקום ב-fetch הרגיל
+            let govData = await fetchGovmapJSONP(govmapUrl);
+
+            let lat = "", lng = "", errorMsg = "";
+
+            if (govData && govData.features && govData.features.length > 0) {
+                lng = govData.features[0].geometry.x;
+                lat = govData.features[0].geometry.y;
+                log(`  -> נמצאו קואורדינטות! Lat: ${lat}, Lng: ${lng}`, "");
+            } else {
+                errorMsg = "לא נמצאו תוצאות ב-Govmap";
+                log(`  -> ${errorMsg}`, "warning");
+            }
+
+            // שמירת התוצאות לגוגל שיטס
+            let saveUrl = `${scriptUrl}?action=saveCoordinate&sheetId=${sheetId}&row=${item.row}&lat=${lat}&lng=${lng}&errorMsg=${encodeURIComponent(errorMsg)}`;
+            let saveResponse = await fetch(saveUrl);
+            let saveResult = await saveResponse.json();
+
+            if (saveResult.status !== "success") {
+                log(`  -> שגיאה בשמירה לגוגל: ${saveResult.message}`, "error");
+            }
+
+        } catch (err) {
+            log(`  -> שגיאה: ${err.message}`, "error");
+            try {
+                let saveUrl = `${scriptUrl}?action=saveCoordinate&sheetId=${sheetId}&row=${item.row}&lat=&lng=&errorMsg=${encodeURIComponent(err.message)}`;
+                await fetch(saveUrl);
+            } catch (e) {}
+        }
+
+        // השהיה קצרה למניעת עומס
+        currentIndex++;
+        setTimeout(processNext, 300);
+    }
+</script>
+
+</body>
+</html>
