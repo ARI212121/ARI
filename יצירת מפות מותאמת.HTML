@@ -3,71 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מפת כתובות בבני ברק</title>
+    <title>מפת כתובות לפי אזורים</title>
     <script src="https://www.govmap.gov.il/govmap/api/govmap.api.js" defer onload="initGovMap()"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-        /* המפה תתפוס 90% מהגובה כדי להשאיר מקום לכפתורים למטה */
-        #map-container { width: 100vw; height: 90vh; }
+        /* המפה ממלאת את כל המסך ב-100% כדי לקבל איכות מקסימלית בייצוא */
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: Arial, sans-serif; }
+        #map-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 1; }
         
         #loading { 
-            position: absolute; 
-            top: 50%; left: 50%; 
-            transform: translate(-50%, -50%); 
-            background: rgba(255,255,255,0.9); 
-            padding: 20px; 
-            border-radius: 8px; 
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            z-index: 1000;
-            text-align: center;
-            font-size: 18px;
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            background: rgba(255,255,255,0.9); padding: 20px; border-radius: 8px; z-index: 2000;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2); text-align: center; font-size: 18px;
         }
 
-        /* עיצוב פשוט לכפתורים בתחתית המסך */
-        #buttons-container {
-            height: 10vh;
+        /* הפאנל הצף של הכפתורים - מרחף מעל המפה */
+        #controls-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
             display: flex;
-            justify-content: center;
-            align-items: center;
-            background-color: #f1f1f1;
+            flex-direction: column;
             gap: 15px;
+            align-items: center;
         }
+
+        .row { display: flex; gap: 10px; align-items: center; }
+        .zone-label { font-size: 18px; font-weight: bold; min-width: 150px; text-align: center; color: #333; }
 
         button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            background-color: #fff;
+            padding: 8px 16px; font-size: 14px; cursor: pointer; border-radius: 5px; 
+            border: 1px solid #ccc; background-color: #fff; transition: background 0.2s;
         }
+        button:hover { background-color: #e9e9e9; }
         
-        button:hover {
-            background-color: #e9e9e9;
-        }
-        
-        .btn-primary {
-            background-color: #0056b3;
-            color: white;
-            border: none;
-        }
-        
-        .btn-primary:hover {
-            background-color: #004494;
-        }
+        .btn-primary { background-color: #0056b3; color: white; border: none; font-weight: bold;}
+        .btn-primary:hover { background-color: #004494; }
+        .btn-nav { background-color: #28a745; color: white; border: none; font-weight: bold;}
+        .btn-nav:hover { background-color: #218838; }
+        button:disabled { background-color: #cccccc; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
-    <div id="loading">טוען נתונים ומכין מפה... אנא המתן מעט.</div>
+    <div id="loading">טוען נתונים מהשרת... אנא המתן.</div>
     
     <div id="map-container"></div>
     
-    <div id="buttons-container">
-        <button class="btn-primary" onClick="exportMapImage()">💾 ייצא מפה לתמונה (איכות גבוהה)</button>
-        <button onClick="showExample()">🖨️ הדפסה רגילה</button>
-        <button onClick="closeExample()">❌ סגור תפריטי הדפסה/ייצוא</button>
+    <div id="controls-panel" style="display: none;">
+        <div class="row">
+            <button id="btn-next" class="btn-nav" onClick="changeZone(1)">אזור הבא ◀</button>
+            <div id="zone-display" class="zone-label">אזור: --</div>
+            <button id="btn-prev" class="btn-nav" onClick="changeZone(-1)">▶ אזור קודם</button>
+        </div>
+        <div class="row">
+            <button class="btn-primary" onClick="exportMapImage()">💾 ייצא אזור לתמונה</button>
+            <button onClick="showExample()">🖨️ הדפסה רגילה</button>
+            <button onClick="closeExample()">❌ סגור תפריט הדפסה</button>
+        </div>
     </div>
 
     <script>
@@ -77,6 +76,11 @@
         proj4.defs("EPSG:2039", "+proj=tmerc +lat_0=31.73439361111111 +lon_0=35.20451694444445 +k=1.0000067 +x_0=219529.584 +y_0=626907.39 +ellps=GRS80 +towgs84=-48,55,52,0,0,0,0 +units=m +no_defs");
 
         let isGovMapLoaded = false;
+        
+        // משתנים גלובליים לניהול האזורים
+        let allLocations = [];
+        let uniqueZones = [];
+        let currentZoneIndex = 0;
 
         function initGovMap() {
             isGovMapLoaded = true;
@@ -98,54 +102,79 @@
                 const response = await fetch(gasWebAppUrl);
                 const locations = await response.json();
                 
-                if(locations.error) {
-                    throw new Error(locations.error);
-                }
+                if(locations.error) throw new Error(locations.error);
+                
+                allLocations = locations;
+                
+                // שליפת כל האזורים הייחודיים מהנתונים
+                const zonesSet = new Set();
+                allLocations.forEach(loc => {
+                    if (loc.zone) zonesSet.add(loc.zone.toString().trim());
+                });
+                
+                uniqueZones = Array.from(zonesSet);
+                
+                // מיון האזורים למקרה שהם מספרים (כדי שאזור 2 יבוא לפני אזור 10)
+                uniqueZones.sort((a, b) => {
+                    const numA = parseInt(a);
+                    const numB = parseInt(b);
+                    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                    return a.localeCompare(b);
+                });
 
-                drawPointsOnMap(locations);
+                if(uniqueZones.length > 0) {
+                    document.getElementById('controls-panel').style.display = 'flex';
+                    renderCurrentZone();
+                } else {
+                    document.getElementById('loading').innerText = "לא נמצאו נתונים תקינים.";
+                }
 
             } catch (error) {
                 console.error("שגיאה בטעינת הנתונים:", error);
-                document.getElementById('loading').innerHTML = "אירעה שגיאה בטעינת הנתונים מהסקריפט.<br>בדוק את קונסול הדפדפן.";
+                document.getElementById('loading').innerHTML = "אירעה שגיאה בטעינת הנתונים מהסקריפט.";
             }
         }
 
-        // --- פונקציות ייצוא והדפסה מהתיעוד ---
-        function exportMapImage() {
-            try {
-                govmap.showExportMap();
-            } catch (err) {
-                console.error("שגיאה בפתיחת כלי הייצוא:", err);
-                alert("כלי הייצוא לא זמין כרגע.");
+        // --- פעולות הדפסה ---
+        function exportMapImage() { try { govmap.showExportMap(); } catch (err) {} }
+        function showExample(){ govmap.showPrint(); }
+        function closeExample(){ govmap.closePrint(); }
+
+        // --- פונקציית ניווט בין אזורים ---
+        function changeZone(direction) {
+            const newIndex = currentZoneIndex + direction;
+            if (newIndex >= 0 && newIndex < uniqueZones.length) {
+                currentZoneIndex = newIndex;
+                renderCurrentZone();
             }
         }
 
-        function showExample(){
-            govmap.showPrint();
+        function updateButtons() {
+            document.getElementById('btn-prev').disabled = (currentZoneIndex === 0);
+            document.getElementById('btn-next').disabled = (currentZoneIndex === uniqueZones.length - 1);
+            document.getElementById('zone-display').innerText = "אזור: " + uniqueZones[currentZoneIndex];
         }
-        
-        function closeExample(){
-            govmap.closePrint();
-            // פונקציית הייצוא משתמשת לפעמים באותו ממשק סגירה, לכן סוגרים הכל
-        }
-        // --------------------------------
 
-        function drawPointsOnMap(locations) {
-            console.log("מתחיל עיבוד " + locations.length + " נקודות...");
+        // --- ציור האזור הנוכחי בלבד ---
+        function renderCurrentZone() {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('loading').innerText = "טוען אזור " + uniqueZones[currentZoneIndex] + "...";
+            updateButtons();
+
+            const currentZoneName = uniqueZones[currentZoneIndex];
+            const zoneLocations = allLocations.filter(loc => loc.zone.toString().trim() === currentZoneName);
             
             let wkts = [];
             let names = [];
             let tooltips = [];
-            
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let validPointsCount = 0;
 
-            for (let i = 0; i < locations.length; i++) {
-                const loc = locations[i];
+            for (let i = 0; i < zoneLocations.length; i++) {
+                const loc = zoneLocations[i];
                 if (loc.lat && loc.lng) {
                     try {
                         const itmCoords = proj4("EPSG:4326", "EPSG:2039", [parseFloat(loc.lng), parseFloat(loc.lat)]);
-                        
                         const x = Math.round(itmCoords[0]);
                         const y = Math.round(itmCoords[1]);
 
@@ -156,14 +185,12 @@
                             if(y > maxY) maxY = y;
 
                             wkts.push("POINT(" + x + " " + y + ")");
-                            names.push("p" + i);
-                            tooltips.push(loc.address || "נקודת ציון");
-                            
+                            // שימוש בשם ייחודי לכל אזור כדי שגובמפס לא יתבלבל בין מחיקות
+                            names.push("zone_" + currentZoneIndex + "_p" + i);
+                            tooltips.push(loc.address);
                             validPointsCount++;
                         }
-                    } catch (e) {
-                        console.error("שגיאה בהמרת נקודה:", e);
-                    }
+                    } catch (e) {}
                 }
             }
 
@@ -177,16 +204,15 @@
                         width: 24,
                         height: 24
                     },
-                    data: {
-                        tooltips: tooltips
-                    }
+                    clearExistings: true, // מוחק אוטומטית את הנקודות של האזור הקודם!
+                    data: { tooltips: tooltips }
                 };
 
-                govmap.displayGeometries(geometryParams).then(function(response) {
-                    console.log("הנקודות צוירו בהצלחה:", response);
+                govmap.displayGeometries(geometryParams).then(function() {
+                    // ביצוע זום מדויק לפי גבולות האזור הנוכחי בלבד!
+                    const marginX = Math.max((maxX - minX) * 0.1, 100); // 100 מטר שוליים מינימליים למקרה של נקודה אחת
+                    const marginY = Math.max((maxY - minY) * 0.1, 100);
                     
-                    const marginX = (maxX - minX) * 0.05;
-                    const marginY = (maxY - minY) * 0.05;
                     govmap.zoomToExtent({ 
                         xmin: minX - marginX, 
                         ymin: minY - marginY, 
@@ -195,15 +221,14 @@
                     });
                     
                     document.getElementById('loading').style.display = 'none';
-
                 }).catch(function(err) {
                     console.error("שגיאה בציור של GovMap:", err);
                     document.getElementById('loading').style.display = 'none';
-                    alert("שגיאה בציור הנקודות על המפה.");
                 });
 
             } else {
-                document.getElementById('loading').innerText = "לא נמצאו נקודות עם קואורדינטות בתוך שטח ישראל.";
+                document.getElementById('loading').style.display = 'none';
+                alert("אין קואורדינטות תקינות לאזור זה.");
             }
         }
     </script>
