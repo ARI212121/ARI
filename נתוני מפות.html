@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>Govmap Geocoder - Official API</title>
+    <script src="https://www.govmap.gov.il/govmap/api/govmap.api.js" defer onload="apiLoaded()"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f4f9; color: #333; margin: 0; padding: 20px; }
+        .container { max-width: 600px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        label { font-weight: bold; display: block; margin-top: 15px; margin-bottom: 5px; }
+        input[type="text"] { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .row-inputs { display: flex; gap: 10px; }
+        .row-inputs > div { flex: 1; }
+        button { width: 100%; padding: 12px; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; margin-top: 10px; font-weight: bold; }
+        #startBtn { background-color: #0056b3; }
+        #startBtn:disabled { background-color: #aaa; cursor: not-allowed; }
+        #stopBtn { background-color: #dc3545; display: none; }
+        #stopBtn:disabled { background-color: #aaa; cursor: not-allowed; }
+        #logArea { margin-top: 20px; font-size: 14px; background: #222; color: #0f0; height: 350px; overflow-y: auto; padding: 10px; border-radius: 4px; text-align: left; direction: ltr; font-family: monospace; }
+        .log-entry { margin-bottom: 4px; }
+        .error { color: #ff5252; }
+        .warning { color: #ffd54f; }
+        #mapDiv { display: none; width: 10px; height: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>המרת כתובות מול Govmap בגושים</h2>
+    
+    <label>מזהה קובץ ה-Google Sheets (ID):</label>
+    <input type="text" id="sheetId" value="1Px1gCZT3BPgeYeNdTQQ6PbOQiGH6zx7wk5qiKWV0eFI">
+    
+    <div class="row-inputs">
+        <div>
+            <label>עמודת רחוב (לדוגמה: A):</label>
+            <input type="text" id="colStreet" value="K" placeholder="אות אנגלית">
+        </div>
+        <div>
+            <label>עמודת מספר בית (לדוגמה: B):</label>
+            <input type="text" id="colBuilding" value="L" placeholder="אות אנגלית">
+        </div>
+    </div>
+
+    <label>שם עיר קבוע לצירוף (לכל הבקשות):</label>
+    <input type="text" id="cityName" placeholder="לדוגמה: ירושלים">
+    
+    <button id="startBtn" onclick="initMapAndStart()" disabled>טוען מערכת מפות...</button>
+    <button id="stopBtn" onclick="stopProcess()">עצור תהליך</button>
+    
+    <div id="logArea"></div>
+    <div id="mapDiv"></div>
+</div>
+
+<script>
+    // --- הגדרות קבועות (הטמעה בקוד) ---
+    const API_TOKEN = "b0df1dbf-572e-474e-a6b3-9ef5676c1df9"; 
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzF7Gb6PVc8Z_V9Nm4ANTuUMyll9LkGtgKjUNewK55NLEfnK5Hllt2uXJZBZMKAo2PNBg/exec"; 
+    
+    var addresses = [];
+    var currentIndex = 0;
+    var sheetId = "";
+    var batchResults = [];
+    var batchSize = 20;
+    var isStopped = false;
+
+    // --- שמירה וטעינה של נתוני השדות למטמון הדפדפן ---
+    document.addEventListener("DOMContentLoaded", function() {
+        // טעינת נתונים אם קיימים
+        if(localStorage.getItem('govmap_sheetId')) document.getElementById('sheetId').value = localStorage.getItem('govmap_sheetId');
+        if(localStorage.getItem('govmap_colStreet')) document.getElementById('colStreet').value = localStorage.getItem('govmap_colStreet');
+        if(localStorage.getItem('govmap_colBuilding')) document.getElementById('colBuilding').value = localStorage.getItem('govmap_colBuilding');
+        if(localStorage.getItem('govmap_cityName')) document.getElementById('cityName').value = localStorage.getItem('govmap_cityName');
+
+        // שמירת נתונים בעת הקלדה
+        document.getElementById('sheetId').addEventListener('input', function() { localStorage.setItem('govmap_sheetId', this.value); });
+        document.getElementById('colStreet').addEventListener('input', function() { localStorage.setItem('govmap_colStreet', this.value); });
+        document.getElementById('colBuilding').addEventListener('input', function() { localStorage.setItem('govmap_colBuilding', this.value); });
+        document.getElementById('cityName').addEventListener('input', function() { localStorage.setItem('govmap_cityName', this.value); });
+    });
+
+    function apiLoaded() {
+        document.getElementById('startBtn').innerText = "התחל המרה";
+        document.getElementById('startBtn').disabled = false;
+    }
+
+    function log(msg, type) {
+        var logArea = document.getElementById('logArea');
+        var span = document.createElement('div');
+        span.className = 'log-entry ' + (type || '');
+        span.textContent = msg;
+        logArea.appendChild(span);
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    // המרת רשת ישראל ל-WGS84
+    function itmToWgs84(easting, northing) {
+        var a = 6378137.0, e = 0.0818191908426, lat0 = 31.7340968 * Math.PI / 180, lon0 = 35.2045169 * Math.PI / 180;
+        var k0 = 1.0000067, falseEasting = 219529.584, falseNorthing = 626907.390;
+        var x = easting - falseEasting, y = northing - falseNorthing;
+        var M0 = a * ((1 - e*e/4 - 3*Math.pow(e,4)/64 - 5*Math.pow(e,6)/256) * lat0 
+               - (3*e*e/8 + 3*Math.pow(e,4)/32 + 45*Math.pow(e,6)/1024) * Math.sin(2*lat0) 
+               + (15*Math.pow(e,4)/256 + 45*Math.pow(e,6)/1024) * Math.sin(4*lat0) 
+               - (35*Math.pow(e,6)/3072) * Math.sin(6*lat0));
+        var M = y / k0 + M0;
+        var mu = M / (a * (1 - e*e/4 - 3*Math.pow(e,4)/64 - 5*Math.pow(e,6)/256));
+        var e1 = (1 - Math.sqrt(1 - e*e)) / (1 + Math.sqrt(1 - e*e));
+        var lat1 = mu + (3*e1/2 - 27*Math.pow(e1,3)/32) * Math.sin(2*mu) 
+                 + (21*Math.pow(e1,2)/16 - 55*Math.pow(e1,4)/32) * Math.sin(4*mu) 
+                 + (151*Math.pow(e1,3)/96) * Math.sin(6*mu);
+        var N1 = a / Math.sqrt(1 - e*e * Math.pow(Math.sin(lat1),2));
+        var T1 = Math.pow(Math.tan(lat1),2);
+        var C1 = e * e * Math.pow(Math.cos(lat1),2) / (1 - e*e);
+        var R1 = a * (1 - e*e) / Math.pow(1 - e*e * Math.pow(Math.sin(lat1),2), 1.5);
+        var D = x / (N1 * k0);
+        var lat = lat1 - (N1 * Math.tan(lat1) / R1) * (Math.pow(D,2)/2 - (5 + 3*T1 + 10*C1 - 4*C1*C1 - 9*e*e)*Math.pow(D,4)/24 + (61 + 90*T1 + 298*C1 + 45*T1*T1 - 252*e*e - 3*C1*C1)*Math.pow(D,6)/720);
+        var lon = lon0 + (D - (1 + 2*T1 + C1)*Math.pow(D,3)/6 + (5 - 2*C1 + 28*T1 - 3*C1*C1 + 8*e*e + 24*T1*T1)*Math.pow(D,5)/120) / Math.cos(lat1);
+        return { lat: lat * 180 / Math.PI, lng: lon * 180 / Math.PI };
+    }
+
+    async function initMapAndStart() {
+        sheetId = document.getElementById('sheetId').value.trim();
+        if (!API_TOKEN || !SCRIPT_URL || !sheetId) {
+            alert("נא לוודא שקובץ ה-ID, הקישור והטוקן מוגדרים.");
+            return;
+        }
+
+        isStopped = false;
+        document.getElementById('startBtn').style.display = 'none';
+        document.getElementById('stopBtn').style.display = 'block';
+        document.getElementById('stopBtn').disabled = false;
+        
+        log("מאתחל את מנוע המפה...", "");
+
+        try {
+            govmap.createMap('mapDiv', { token: API_TOKEN, visibleLayers: [] });
+            setTimeout(fetchAddressesFromGoogle, 1500);
+        } catch(e) {
+            log("שגיאה באתחול: " + e.message, "error");
+            resetButtons();
+        }
+    }
+
+    function stopProcess() {
+        isStopped = true;
+        document.getElementById('stopBtn').disabled = true;
+        log("עוצר את התהליך... מסיים את הפעולה הנוכחית ושומר נתונים.", "warning");
+    }
+
+    function resetButtons() {
+        document.getElementById('startBtn').style.display = 'block';
+        document.getElementById('startBtn').disabled = false;
+        document.getElementById('stopBtn').style.display = 'none';
+    }
+
+    async function fetchAddressesFromGoogle() {
+        let col1 = document.getElementById('colStreet').value.trim().toUpperCase();
+        let col2 = document.getElementById('colBuilding').value.trim().toUpperCase();
+        
+        if(!col1 || !col2) {
+            log("נא להזין עמודות באנגלית", "error");
+            resetButtons();
+            return;
+        }
+
+        log("מתחבר לגוגל שיטס למשיכת הכתובות מעמודות " + col1 + "," + col2 + "...", "");
+        try {
+            let url = `${SCRIPT_URL}?action=getAddresses&sheetId=${sheetId}&col1=${col1}&col2=${col2}`;
+            let response = await fetch(url);
+            let result = await response.json();
+
+            if (result.status === "success") {
+                addresses = result.data;
+                if (addresses.length === 0) {
+                    log("לא נמצאו כתובות חדשות לטיפול בקובץ.", "warning");
+                    resetButtons();
+                    return;
+                }
+                log(`נמשכו ${addresses.length} רשומות חדשות. מתחיל סריקה...`, "");
+                currentIndex = 0;
+                batchResults = [];
+                processNext();
+            } else {
+                log("שגיאה משרת גוגל: " + result.message, "error");
+                resetButtons();
+            }
+        } catch (err) {
+            log("שגיאת תקשורת מול גוגל סקריפט: " + err.message, "error");
+            resetButtons();
+        }
+    }
+
+    async function processNext() {
+        if (isStopped) {
+            if (batchResults.length > 0) {
+                await sendBatchToGoogle();
+            }
+            log("--- התהליך נעצר בהצלחה ---", "warning");
+            resetButtons();
+            return;
+        }
+
+        if (currentIndex >= addresses.length) {
+            if (batchResults.length > 0) {
+                await sendBatchToGoogle();
+            }
+            log("--- התהליך הסתיים בהצלחה! ---", "");
+            resetButtons();
+            return;
+        }
+
+        let item = addresses[currentIndex];
+        let city = document.getElementById('cityName').value.trim();
+        
+        let searchKeyword = item.addressStr;
+        if (city) {
+            searchKeyword += ", " + city;
+        }
+
+        log(`[Row ${item.row}] מחפש: ${searchKeyword}`);
+
+        try {
+            govmap.geocode({ keyword: searchKeyword })
+                .then(async function(response) {
+                    if (response && response.data && response.data.length > 0) {
+                        let coords = itmToWgs84(response.data[0].X, response.data[0].Y);
+                        let lat = coords.lat.toFixed(6);
+                        let lng = coords.lng.toFixed(6);
+                        log(`  -> נמצא! Lat: ${lat}, Lng: ${lng}`, "");
+                        batchResults.push({ row: item.row, lat: lat, lng: lng, errorMsg: "" });
+                    } else {
+                        log(`  -> לא נמצאו תוצאות`, "warning");
+                        batchResults.push({ row: item.row, lat: "", lng: "", errorMsg: "לא נמצאו תוצאות" });
+                    }
+                    await handleBatchAndContinue();
+                })
+                .catch(async function(err) {
+                    log(`  -> שגיאה משרת גוב מפס`, "error");
+                    batchResults.push({ row: item.row, lat: "", lng: "", errorMsg: "שגיאת Govmap API" });
+                    await handleBatchAndContinue();
+                });
+
+        } catch (err) {
+            log(`  -> שגיאה: ${err.message}`, "error");
+            batchResults.push({ row: item.row, lat: "", lng: "", errorMsg: err.message });
+            await handleBatchAndContinue();
+        }
+    }
+
+    async function handleBatchAndContinue() {
+        currentIndex++;
+        if (batchResults.length >= batchSize) {
+            await sendBatchToGoogle();
+        }
+        setTimeout(processNext, 400);
+    }
+
+    async function sendBatchToGoogle() {
+        log(`==> שומר מקבץ של ${batchResults.length} עדכונים לשיטס...`, "");
+        try {
+            let response = await fetch(SCRIPT_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({
+                    action: "saveBatch",
+                    sheetId: sheetId,
+                    data: batchResults
+                })
+            });
+            let result = await response.json();
+            if (result.status === "success") {
+                log(`==> המקבץ נשמר בהצלחה!`, "");
+            } else {
+                log(`==> שגיאה בשמירת המקבץ: ${result.message}`, "error");
+            }
+        } catch(e) {
+            log(`==> שגיאת תקשורת בשמירת המקבץ: ${e.message}`, "error");
+        }
+        batchResults = [];
+    }
+</script>
+
+</body>
+</html>
