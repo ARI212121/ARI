@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>מפת כתובות בבני ברק - 3000 נקודות</title>
+    <!-- טעינת GovMap -->
+    <script src="https://www.govmap.gov.il/govmap/api/govmap.api.js" defer onload="initGovMap()"></script>
+    <!-- טעינת ספריית המרת קואורדינטות מ-Google ל-GovMap -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+        #map-container { width: 100vw; height: 100vh; }
+        #loading { 
+            position: absolute; 
+            top: 50%; left: 50%; 
+            transform: translate(-50%, -50%); 
+            background: rgba(255,255,255,0.9); 
+            padding: 20px; 
+            border-radius: 8px; 
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            text-align: center;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loading">טוען נתונים ומכין מפה... אנא המתן מעט.</div>
+    <div id="map-container"></div>
+
+    <script>
+        // הקישור שלך ל-Google Apps Script
+        const gasWebAppUrl = "https://script.google.com/macros/s/AKfycbzsn50hfykXgjr2-_d1jUU1B7RAg8BsGRgE_fR3e-i5HI2LZtlUB1BUo6oIz9z3s4FD/exec";
+        
+        // טוקן פיתוח בסיסי. שים לב: אם אתה מריץ מקומית (file:// או blob), המערכת תזרוק שגיאת Token בקונסול. 
+        // זה תקין בסביבת פיתוח, אך לייצור תצטרך להנפיק טוקן חינמי לאתר שלך מול GovMap.
+        const govmapToken = "b0df1dbf-572e-474e-a6b3-9ef5676c1df9";
+
+        // הגדרת רשת ישראל החדשה (ITM) בצורה מדויקת
+        proj4.defs("EPSG:2039", "+proj=tmerc +lat_0=31.73439361111111 +lon_0=35.20451694444445 +k=1.0000067 +x_0=219529.584 +y_0=626907.39 +ellps=GRS80 +towgs84=-48,55,52,0,0,0,0 +units=m +no_defs");
+
+        let isGovMapLoaded = false;
+
+        function initGovMap() {
+            isGovMapLoaded = true;
+            startApp();
+        }
+
+        async function startApp() {
+            if (!isGovMapLoaded) return; 
+
+            try {
+                // שליפת הנתונים מהגיליון
+                const response = await fetch(gasWebAppUrl);
+                const locations = await response.json();
+                
+                if(locations.error) {
+                    throw new Error(locations.error);
+                }
+
+                // יצירת המפה
+                govmap.createMap('map-container', {
+                    token: govmapToken,
+                    layers: [],
+                    showXY: true,
+                    background: "0",
+                    onLoad: function() {
+                        drawPointsOnMap(locations);
+                    }
+                });
+            } catch (error) {
+                console.error("שגיאה בטעינת הנתונים:", error);
+                document.getElementById('loading').innerHTML = "אירעה שגיאה בטעינת הנתונים.<br>בדוק את קונסול הדפדפן.";
+            }
+        }
+
+        function drawPointsOnMap(locations) {
+            console.log("מתחיל לצייר " + locations.length + " נקודות...");
+            let points = [];
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+            // המרת הנקודות והכנתן
+            for (const loc of locations) {
+                if (loc.lat && loc.lng) {
+                    try {
+                        const itmCoords = proj4("EPSG:4326", "EPSG:2039", [parseFloat(loc.lng), parseFloat(loc.lat)]);
+                        
+                        // שימוש במספרים שלמים בלבד!
+                        const x = Math.round(itmCoords[0]);
+                        const y = Math.round(itmCoords[1]);
+
+                        if(x < minX) minX = x; 
+                        if(x > maxX) maxX = x;
+                        if(y < minY) minY = y; 
+                        if(y > maxY) maxY = y;
+
+                        points.push({
+                            type: govmap.drawType.Point,
+                            x: x,
+                            y: y,
+                            tooltip: loc.address
+                        });
+                    } catch (e) {
+                        console.error("שגיאה בהמרת נקודה:", e);
+                    }
+                }
+            }
+
+            if (points.length > 0) {
+                // הוסר: govmap.clearGeometries() שגרם לקריסה מאחר והפונקציה אינה נתמכת בשלב זה
+
+                // ממתינים חצי שנייה כדי לוודא שהמפה מוכנה לקבל אלפי נקודות
+                setTimeout(function() {
+                    try {
+                        govmap.displayGeometries(points);
+                        console.log("הנקודות הוצגו בהצלחה.");
+
+                        // זום אוטומטי לאזור בני ברק
+                        const marginX = (maxX - minX) * 0.1;
+                        const marginY = (maxY - minY) * 0.1;
+                        govmap.zoomToExtent({ 
+                            xmin: minX - marginX, 
+                            ymin: minY - marginY, 
+                            xmax: maxX + marginX, 
+                            ymax: maxY + marginY 
+                        });
+                        
+                        document.getElementById('loading').style.display = 'none';
+                    } catch (err) {
+                        console.error("שגיאה בהצגת הנקודות:", err);
+                        document.getElementById('loading').innerText = "אירעה שגיאה בציור הנקודות.";
+                    }
+                }, 500);
+            } else {
+                document.getElementById('loading').innerText = "לא נמצאו נקודות עם קואורדינטות.";
+            }
+        }
+    </script>
+</body>
+</html>
