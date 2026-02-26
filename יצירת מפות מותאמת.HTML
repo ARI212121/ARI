@@ -1,128 +1,5 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מפת כתובות בבני ברק - הדפסה</title>
-    <script src="https://www.govmap.gov.il/govmap/api/govmap.api.js" defer onload="initGovMap()"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-        #map-container { width: 100vw; height: 100vh; }
-        
-        #loading { 
-            position: absolute; 
-            top: 50%; left: 50%; 
-            transform: translate(-50%, -50%); 
-            background: rgba(255,255,255,0.9); 
-            padding: 20px; 
-            border-radius: 8px; 
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            z-index: 1000;
-            text-align: center;
-            font-size: 18px;
-        }
-
-        /* עיצוב עבור כפתורי ההדפסה שיצופו מעל המפה */
-        #print-controls {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            z-index: 1000; /* מוודא שהכפתורים מעל המפה */
-            background: rgba(255, 255, 255, 0.9);
-            padding: 10px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-        }
-
-        #print-controls button {
-            padding: 10px 15px;
-            margin: 0 5px;
-            font-size: 14px;
-            cursor: pointer;
-            background-color: #0056b3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            font-weight: bold;
-        }
-
-        #print-controls button:hover {
-            background-color: #004494;
-        }
-    </style>
-</head>
-<body>
-
-    <div id="loading">טוען נתונים ומכין מפה... אנא המתן מעט.</div>
-    
-    <div id="print-controls" style="display: none;">
-        <button onclick="printMap()">🖨️ הדפס מפה</button>
-        <button onclick="closePrintMap()">❌ סגור הדפסה</button>
-    </div>
-
-    <div id="map-container"></div>
-
-    <script>
-        const gasWebAppUrl = "https://script.google.com/macros/s/AKfycbzsn50hfykXgjr2-_d1jUU1B7RAg8BsGRgE_fR3e-i5HI2LZtlUB1BUo6oIz9z3s4FD/exec";
-        const govmapToken = "b0df1dbf-572e-474e-a6b3-9ef5676c1df9";
-
-        proj4.defs("EPSG:2039", "+proj=tmerc +lat_0=31.73439361111111 +lon_0=35.20451694444445 +k=1.0000067 +x_0=219529.584 +y_0=626907.39 +ellps=GRS80 +towgs84=-48,55,52,0,0,0,0 +units=m +no_defs");
-
-        let isGovMapLoaded = false;
-
-        function initGovMap() {
-            isGovMapLoaded = true;
-            startApp();
-        }
-
-        async function startApp() {
-            if (!isGovMapLoaded) return; 
-
-            try {
-                const response = await fetch(gasWebAppUrl);
-                const locations = await response.json();
-                
-                if(locations.error) {
-                    throw new Error(locations.error);
-                }
-
-                govmap.createMap('map-container', {
-                    token: govmapToken,
-                    layers: [],
-                    showXY: true,
-                    background: "0",
-                    onLoad: function() {
-                        drawPointsOnMap(locations);
-                    }
-                });
-            } catch (error) {
-                console.error("שגיאה בטעינת הנתונים:", error);
-                document.getElementById('loading').innerHTML = "אירעה שגיאה בטעינת הנתונים.<br>בדוק את קונסול הדפדפן.";
-            }
-        }
-
-        // --- פונקציות ההדפסה ---
-        function printMap() {
-            try {
-                govmap.showPrint();
-            } catch (e) {
-                console.error("שגיאה בפתיחת חלון הדפסה:", e);
-                alert("אירעה שגיאה בפתיחת חלון ההדפסה.");
-            }
-        }
-
-        function closePrintMap() {
-            try {
-                govmap.closePrint();
-            } catch (e) {
-                console.error("שגיאה בסגירת חלון הדפסה:", e);
-            }
-        }
-        // -----------------------
-
-        function drawPointsOnMap(locations) {
-            console.log("מתחיל לצייר " + locations.length + " נקודות...");
+function drawPointsOnMap(locations) {
+            console.log("מתחיל עיבוד " + locations.length + " נקודות...");
             
             let wkts = [];
             let names = [];
@@ -131,6 +8,7 @@
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let validPointsCount = 0;
 
+            // 1. עיבוד הקואורדינטות
             for (let i = 0; i < locations.length; i++) {
                 const loc = locations[i];
                 if (loc.lat && loc.lng) {
@@ -160,31 +38,9 @@
 
             if (validPointsCount > 0) {
                 setTimeout(function() {
+                    
+                    // 2. קודם כל מבצעים זום ומציגים את הכפתורים (כדי להבטיח שזה יעבוד תמיד!)
                     try {
-                        const pointType = govmap.drawType ? govmap.drawType.Point : 0;
-
-                        const geometryParams = {
-                            wkts: wkts,
-                            names: names,
-                            geometryType: pointType,
-                            defaultSymbol: {
-                                url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png', // עודכן ל-HTTPS תקין
-                                width: 32,
-                                height: 32
-                            },
-                            clearExistings: true,
-                            showBubble: true,
-                            data: {
-                                tooltips: tooltips
-                            }
-                        };
-
-                        govmap.displayGeometries(geometryParams).then(function(response) {
-                            console.log("תשובת שרת גובמפס לאחר ציור:", response);
-                        }).catch(function(err) {
-                            console.error("שגיאת פנימית של GovMap בעת הציור:", err);
-                        });
-
                         const marginX = (maxX - minX) * 0.05;
                         const marginY = (maxY - minY) * 0.05;
                         govmap.zoomToExtent({ 
@@ -195,18 +51,39 @@
                         });
                         
                         document.getElementById('loading').style.display = 'none';
-                        // הצגת כפתורי ההדפסה רק לאחר שהמפה סיימה להיטען
                         document.getElementById('print-controls').style.display = 'block';
+                    } catch (err) {
+                        console.error("שגיאה בביצוע הזום:", err);
+                    }
+
+                    // 3. כעת מנסים לצייר את הנקודות באובייקט נקי ככל האפשר
+                    try {
+                        const geometryParams = {
+                            wkts: wkts,
+                            names: names,
+                            geometryType: 0, // 0 מייצג Point ב-GovMap
+                            defaultSymbol: {
+                                url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png', // תמונה מאובטחת
+                                width: 24,
+                                height: 24
+                            },
+                            data: {
+                                tooltips: tooltips
+                            }
+                        };
+
+                        govmap.displayGeometries(geometryParams).then(function(response) {
+                            console.log("הנקודות צוירו בהצלחה:", response);
+                        }).catch(function(err) {
+                            console.error("שגיאה בציור של GovMap:", err);
+                        });
 
                     } catch (err) {
                         console.error("שגיאה בהכנת הנתונים לציור:", err);
-                        document.getElementById('loading').innerText = "אירעה שגיאה בציור הנקודות.";
                     }
+                    
                 }, 500);
             } else {
                 document.getElementById('loading').innerText = "לא נמצאו נקודות עם קואורדינטות בתוך שטח ישראל.";
             }
         }
-    </script>
-</body>
-</html>
