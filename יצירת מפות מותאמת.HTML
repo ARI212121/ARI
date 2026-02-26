@@ -38,6 +38,23 @@
             padding: 10px 20px;
             font-size: 16px;
             cursor: pointer;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background-color: #fff;
+        }
+        
+        button:hover {
+            background-color: #e9e9e9;
+        }
+        
+        .btn-primary {
+            background-color: #0056b3;
+            color: white;
+            border: none;
+        }
+        
+        .btn-primary:hover {
+            background-color: #004494;
         }
     </style>
 </head>
@@ -48,8 +65,9 @@
     <div id="map-container"></div>
     
     <div id="buttons-container">
-        <button onClick="showExample()">הדפס מפה</button>
-        <button onClick="closeExample()">סגור הדפסה</button>
+        <button class="btn-primary" onClick="exportMapImage()">💾 ייצא מפה לתמונה (איכות גבוהה)</button>
+        <button onClick="showExample()">🖨️ הדפסה רגילה</button>
+        <button onClick="closeExample()">❌ סגור תפריטי הדפסה/ייצוא</button>
     </div>
 
     <script>
@@ -92,12 +110,23 @@
             }
         }
 
-        // --- פונקציות ההדפסה מהתיעוד ---
+        // --- פונקציות ייצוא והדפסה מהתיעוד ---
+        function exportMapImage() {
+            try {
+                govmap.showExportMap();
+            } catch (err) {
+                console.error("שגיאה בפתיחת כלי הייצוא:", err);
+                alert("כלי הייצוא לא זמין כרגע.");
+            }
+        }
+
         function showExample(){
             govmap.showPrint();
         }
+        
         function closeExample(){
             govmap.closePrint();
+            // פונקציית הייצוא משתמשת לפעמים באותו ממשק סגירה, לכן סוגרים הכל
         }
         // --------------------------------
 
@@ -142,7 +171,7 @@
                 const geometryParams = {
                     wkts: wkts,
                     names: names,
-                    geometryType: 0, // 0 מייצג Point ב-GovMap
+                    geometryType: 0,
                     defaultSymbol: {
                         url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png', 
                         width: 24,
@@ -153,7 +182,6 @@
                     }
                 };
 
-                // ציור הנקודות ואחריו ביצוע הזום
                 govmap.displayGeometries(geometryParams).then(function(response) {
                     console.log("הנקודות צוירו בהצלחה:", response);
                     
