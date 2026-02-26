@@ -70,10 +70,9 @@
        function drawPointsOnMap(locations) {
     console.log("מתחיל לצייר " + locations.length + " נקודות...");
     
-    // מערכים נפרדים לפי הדרישה של GovMap API
-    let wkts = [];       // מערך למיקומי הנקודות בפורמט WKT
-    let names = [];      // מערך שמות פנימיים לנקודות
-    let tooltips = [];   // מערך הטקסט שיופיע במעבר עכבר
+    let wkts = [];
+    let names = [];
+    let tooltips = [];
     
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     let validPointsCount = 0;
@@ -88,14 +87,13 @@
                 const x = Math.round(itmCoords[0]);
                 const y = Math.round(itmCoords[1]);
 
-                // סינון מיקומים חריגים
                 if (x > 130000 && x < 280000 && y > 380000 && y < 800000) {
                     if(x < minX) minX = x; 
                     if(x > maxX) maxX = x;
                     if(y < minY) minY = y; 
                     if(y > maxY) maxY = y;
 
-                    // בניית המחרוזת בפורמט POINT (X Y) שגוב-מאפ דורש
+                    // בניית המחרוזת בפורמט WKT
                     wkts.push("POINT(" + x + " " + y + ")");
                     names.push("p" + i);
                     tooltips.push(loc.address || "נקודת ציון");
@@ -111,50 +109,40 @@
     if (validPointsCount > 0) {
         setTimeout(function() {
             try {
-                // זה האובייקט המדויק שהפונקציה displayGeometries ב-GovMap דורשת!
+                // ווידוא שהסוג הגאומטרי נשאב נכון מהספרייה
+                const pointType = govmap.drawType ? govmap.drawType.Point : 0;
+
                 const geometryParams = {
                     wkts: wkts,
                     names: names,
-                    geometryType: govmap.drawType.Point,
+                    geometryType: pointType,
                     defaultSymbol: {
-                        url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png', // תמונה של סמן אדום
+                        url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
                         width: 32,
                         height: 32
                     },
-                    clearExisting: true, // מנקה ציורים קודמים אם יש
+                    clearExistings: true, // שים לב ל-s בסוף
+                    showBubble: true,
                     data: {
-                        tooltips: tooltips // הכנסת מערך הטקסטים
+                        tooltips: tooltips
                     }
                 };
                 
-                // ציור הנתונים על המפה
+                console.log("פרמטרים שנשלחים ל-GovMap:", geometryParams);
+
                 govmap.displayGeometries(geometryParams).then(function(response) {
                     console.log("תשובת שרת גובמפס לאחר ציור:", response);
+                }).catch(function(err) {
+                    console.error("שגיאת פנימית של GovMap בעת הציור:", err);
                 });
 
-                // ביצוע זום לריבוע התוחם את הנקודות
+                // ביצוע זום
                 const marginX = (maxX - minX) * 0.05;
-                const marginY = (maxY - minY) * 0.05;
-                govmap.zoomToExtent({ 
-                    xmin: minX - marginX, 
-                    ymin: minY - marginY, 
-                    xmax: maxX + marginX, 
-                    ymax: maxY + marginY 
-                });
-                
-                document.getElementById('loading').style.display = 'none';
-            } catch (err) {
-                console.error("שגיאה בהצגת הנקודות:", err);
-                document.getElementById('loading').innerText = "אירעה שגיאה בציור הנקודות.";
-            }
-        }, 500);
-    } else {
-        document.getElementById('loading').innerText = "לא נמצאו נקודות עם קואורדינטות בתוך שטח ישראל.";
-    }
-}
+                const marginY = (maxY - minY) * 0
     </script>
 </body>
 
 </html>
+
 
 
