@@ -67,77 +67,80 @@
             }
         }
 
-        function drawPointsOnMap(locations) {
-            console.log("מתחיל לצייר " + locations.length + " נקודות...");
-            let pointsData = []; // מערך שיאגור רק את נתוני המיקום והטולטיפ
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            let validPointsCount = 0;
+       function drawPointsOnMap(locations) {
+    console.log("מתחיל לצייר " + locations.length + " נקודות...");
+    let pointsData = []; 
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    let validPointsCount = 0;
 
-            for (const loc of locations) {
-            console.log("נתונים שהתקבלו מהסקריפט:", loc);
-                if (loc.lat && loc.lng) {
-                    try {
-                        const itmCoords = proj4("EPSG:4326", "EPSG:2039", [parseFloat(loc.lng), parseFloat(loc.lat)]);
-                        
-                        const x = Math.round(itmCoords[0]);
-                        const y = Math.round(itmCoords[1]);
+    for (const loc of locations) {
+        if (loc.lat && loc.lng) {
+            try {
+                const itmCoords = proj4("EPSG:4326", "EPSG:2039", [parseFloat(loc.lng), parseFloat(loc.lat)]);
+                
+                const x = Math.round(itmCoords[0]);
+                const y = Math.round(itmCoords[1]);
 
-                        // סינון נקודות חריגות כדי למנוע "זום החוצה" דרסטי. 
-                        // נבדוק שהקואורדינטות הגיוניות לאזור מרכז הארץ (בערך).
-                        if (x > 130000 && x < 280000 && y > 380000 && y < 800000) {
-                            if(x < minX) minX = x; 
-                            if(x > maxX) maxX = x;
-                            if(y < minY) minY = y; 
-                            if(y > maxY) maxY = y;
+                if (x > 130000 && x < 280000 && y > 380000 && y < 800000) {
+                    if(x < minX) minX = x; 
+                    if(x > maxX) maxX = x;
+                    if(y < minY) minY = y; 
+                    if(y > maxY) maxY = y;
 
-                            pointsData.push({
-                                x: x,
-                                y: y,
-                                tooltip: loc.address || "נקודת ציון"
-                            });
-                            
-                            validPointsCount++;
-                        }
-                    } catch (e) {
-                        console.error("שגיאה בהמרת נקודה:", e);
-                    }
+                    pointsData.push({
+                        x: x,
+                        y: y,
+                        tooltip: loc.address || "נקודת ציון"
+                    });
+                    
+                    validPointsCount++;
                 }
-            }
-
-            if (validPointsCount > 0) {
-                setTimeout(function() {
-                    try {
-                        // בניית האובייקט לפי הדרישות של GovMap להצגת ריבוי נקודות
-                        const geometryParams = {
-                            type: govmap.drawType.Point,
-                            data: pointsData
-                        };
-                        
-                        // הצגת כל הנקודות במכה אחת במפה
-                        govmap.displayGeometries([geometryParams]);
-                        console.log("הנקודות הוצגו בהצלחה.");
-
-                        // חישוב שוליים קטנים (2% במקום 10%) לתקריב מדויק יותר
-                        const marginX = (maxX - minX) * 0.02;
-                        const marginY = (maxY - minY) * 0.02;
-                        govmap.zoomToExtent({ 
-                            xmin: minX - marginX, 
-                            ymin: minY - marginY, 
-                            xmax: maxX + marginX, 
-                            ymax: maxY + marginY 
-                        });
-                        
-                        document.getElementById('loading').style.display = 'none';
-                    } catch (err) {
-                        console.error("שגיאה בהצגת הנקודות:", err);
-                        document.getElementById('loading').innerText = "אירעה שגיאה בציור הנקודות.";
-                    }
-                }, 500);
-            } else {
-                document.getElementById('loading').innerText = "לא נמצאו נקודות עם קואורדינטות בתוך שטח ישראל.";
+            } catch (e) {
+                console.error("שגיאה בהמרת נקודה:", e);
             }
         }
+    }
+
+    if (validPointsCount > 0) {
+        setTimeout(function() {
+            try {
+                // תיקון: יצירת האובייקט בדיוק לפי דרישות ה-API וללא סוגריים מרובעים
+                const geometryParams = {
+                    type: govmap.drawType.Point,
+                    data: pointsData,
+                    // הגדרת סמל כדי שהנקודות ייראו כמו סמנים (Markers) בולטים
+                    symbol: {
+                        url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png', // תמונה של סמן מפה קלאסי
+                        width: 32,
+                        height: 32
+                    }
+                };
+                
+                // העברת האובייקט ישירות לפונקציה (בלי סוגריים מרובעים!)
+                govmap.displayGeometries(geometryParams);
+                console.log("הנקודות הוצגו בהצלחה.");
+
+                const marginX = (maxX - minX) * 0.05;
+                const marginY = (maxY - minY) * 0.05;
+                govmap.zoomToExtent({ 
+                    xmin: minX - marginX, 
+                    ymin: minY - marginY, 
+                    xmax: maxX + marginX, 
+                    ymax: maxY + marginY 
+                });
+                
+                document.getElementById('loading').style.display = 'none';
+            } catch (err) {
+                console.error("שגיאה בהצגת הנקודות:", err);
+                document.getElementById('loading').innerText = "אירעה שגיאה בציור הנקודות.";
+            }
+        }, 500);
+    } else {
+        document.getElementById('loading').innerText = "לא נמצאו נקודות עם קואורדינטות בתוך שטח ישראל.";
+    }
+}
     </script>
 </body>
 
 </html>
+
