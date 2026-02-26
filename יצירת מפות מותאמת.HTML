@@ -74,6 +74,7 @@
             let validPointsCount = 0;
 
             for (const loc of locations) {
+            console.log("נתונים שהתקבלו מהסקריפט:", loc);
                 if (loc.lat && loc.lng) {
                     try {
                         const itmCoords = proj4("EPSG:4326", "EPSG:2039", [parseFloat(loc.lng), parseFloat(loc.lat)]);
@@ -138,4 +139,5 @@
         }
     </script>
 </body>
+
 </html>
