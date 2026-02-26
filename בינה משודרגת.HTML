@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Oizer AI - ממשק חדשני</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* פלטת צבעים מעודכנת */
+            --primary-color: #4a90e2;
+            --primary-gradient: linear-gradient(135deg, #4a90e2 0%, #007aff 100%);
+            --bg-color: #f0f2f5;
+            --chat-bg: #efe7dd; 
+            --bot-bubble: #ffffff;
+            --user-bubble: #d9fdd3;
+            --text-main: #111b21;
+            --text-secondary: #54656f;
+            --shadow-sm: 0 1px 0.5px rgba(11,20,26,.13);
+        }
+
+        * { box-sizing: border-box; outline: none; }
+        
+        body {
+            font-family: 'Rubik', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--text-main);
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 900px;
+            height: 100%;
+            background-color: #fff;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        @media (min-width: 768px) {
+            .app-container {
+                height: 95vh;
+                border-radius: 16px;
+                box-shadow: 0 17px 50px 0 rgba(0,0,0,.19), 0 12px 15px 0 rgba(0,0,0,.24);
+            }
+        }
+
+        /* --- כותרת מעודכנת --- */
+        header {
+            background-color: #f0f2f5;
+            padding: 10px 16px;
+            display: flex;
+            flex-direction: column; /* שינוי לטור כדי להכיל את ההגדרות */
+            gap: 10px;
+            border-bottom: 1px solid #d1d7db;
+            z-index: 10;
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+        }
+
+        .header-info { display: flex; align-items: center; gap: 10px; }
+        .bot-avatar-header {
+            width: 40px; height: 40px; background: var(--primary-gradient);
+            border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.2rem;
+        }
+        .header-text h2 { margin: 0; font-size: 1rem; color: var(--text-main); }
+        .header-text span { font-size: 0.8rem; color: var(--text-secondary); }
+
+        /* שורת הגדרות מפתחות */
+        .keys-container {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+            flex-wrap: wrap;
+            padding-top: 5px;
+            border-top: 1px solid #e0e0e0;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-width: 100px;
+        }
+
+        .input-group label {
+            font-size: 0.65rem;
+            color: #888;
+            margin-bottom: 2px;
+        }
+
+        .settings-input {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            padding: 4px;
+            width: 100%;
+        }
+
+        .settings-input:focus { border-color: var(--primary-color); }
+
+        /* --- חלון הצ'אט --- */
+        #chat-window {
+            flex: 1;
+            padding: 20px 5%;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            background-color: #e5ddd5;
+            background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' viewBox='0 0 100 100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M11 18c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm48 25c3.866 0 7-3.134 7-7s-3.134-7-7-7-7 3.134-7 7 3.134 7 7 7zm-43-7c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm63 31c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM34 90c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zm56-76c1.657 0 3-1.343 3-3s-1.343-3-3-3-3 1.343-3 3 1.343 3 3 3zM12 86c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm28-65c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm23-11c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-6 60c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm29 22c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zM32 63c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm57-13c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm-9-21c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM60 91c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM35 41c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2zM12 60c1.105 0 2-.895 2-2s-.895-2-2-2-2 .895-2 2 .895 2 2 2z' fill='%239CA3AF' fill-opacity='0.08' fill-rule='evenodd'/%3E%3C/svg%3E");
+            scroll-behavior: smooth;
+        }
+
+        /* קונטיינר להודעה - כולל אווטאר */
+        .msg-row {
+            display: flex;
+            align-items: flex-end;
+            margin-bottom: 2px;
+            animation: popIn 0.3s cubic-bezier(0.27, 0.9, 0.41, 1);
+        }
+        
+        @keyframes popIn { from { opacity: 0; transform: translateY(10px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+        .msg-row.user { justify-content: flex-start; flex-direction: row-reverse; }
+        .msg-row.bot { justify-content: flex-start; }
+
+        .avatar {
+            width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; margin: 0 8px 5px 8px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+        }
+        
+        .bot .avatar { background: white; border: 1px solid #ddd; }
+        .user .avatar { background: #00a884; color: white; }
+
+        .message {
+            max-width: 75%;
+            padding: 8px 12px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            position: relative;
+            box-shadow: var(--shadow-sm);
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            background-color: var(--user-bubble);
+            border-top-left-radius: 8px;
+            border-top-right-radius: 0; 
+        }
+
+        .message.bot {
+            background-color: var(--bot-bubble);
+            border-top-right-radius: 8px;
+            border-top-left-radius: 0;
+        }
+
+        /* עיצוב רשימות וטקסט עשיר בתוך הבועה */
+        .bot-list-item {
+            margin-bottom: 8px;
+            padding-right: 15px; /* הזחה לימין */
+            position: relative;
+        }
+        .bot-list-item::before {
+            content: '•';
+            color: var(--primary-color);
+            position: absolute;
+            right: 0;
+            font-weight: bold;
+        }
+        .bot-list-number {
+            font-weight: bold;
+            color: #007aff;
+            margin-left: 5px;
+        }
+        strong { font-weight: 600; color: #000; }
+
+        .timestamp {
+            font-size: 0.65em;
+            color: rgba(0,0,0,0.45);
+            margin-top: 4px;
+            float: left; /* השעה בצד שמאל למטה */
+            margin-right: 10px;
+        }
+
+        /* --- אזור הקלדה --- */
+        .input-area {
+            background: #f0f2f5;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            background: #fff;
+            border-radius: 24px;
+            padding: 9px 15px;
+            display: flex;
+            align-items: center;
+            border: 1px solid #fff;
+        }
+        
+        .input-wrapper:focus-within { border-color: #d1d7db; }
+
+        textarea {
+            flex: 1; border: none; background: transparent;
+            resize: none; max-height: 100px; height: 24px;
+            font-family: inherit; font-size: 1rem; padding: 0; margin: 0;
+            line-height: 24px;
+        }
+
+        .send-btn {
+            width: 40px; height: 40px; border-radius: 50%;
+            border: none; background: transparent; color: #54656f;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: 0.2s;
+        }
+        
+        .send-btn.active { color: #007aff; }
+        .send-btn:hover { background: rgba(0,0,0,0.05); }
+
+        .reset-icon { color: #ef5350; }
+
+        .status {
+            font-size: 0.75rem; color: #8696a0; text-align: center;
+            position: absolute; width: 100%; top: 110px; pointer-events: none;
+        }
+
+        /* --- עיצוב קוד (Code Block) --- */
+        .code-container {
+            background-color: #1e1e1e; border-radius: 6px; margin: 8px 0;
+            overflow: hidden; direction: ltr; text-align: left; font-size: 0.85rem;
+        }
+        .code-header {
+            background-color: #333; padding: 4px 10px; display: flex;
+            justify-content: space-between; align-items: center;
+        }
+        .code-lang { color: #fff; font-family: monospace; font-size: 0.75rem; }
+        .copy-btn {
+            background: transparent; border: 1px solid #555; color: #ddd;
+            padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; cursor: pointer;
+        }
+        pre { margin: 0; padding: 10px; overflow-x: auto; color: #dcdcdc; font-family: 'Consolas', monospace; }
+        code.inline { background: rgba(0,0,0,0.08); padding: 2px 4px; border-radius: 3px; font-family: monospace; color: #c2185b; font-size: 0.9em; direction: ltr; display: inline-block; }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #ced0d1; border-radius: 3px; }
+
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <header>
+        <div class="header-top">
+            <div class="header-info">
+                <div class="bot-avatar-header">🤖</div>
+                <div class="header-text">
+                    <h2>Oizer AI</h2>
+                    <span>מחובר</span>
+                </div>
+            </div>
+            
+            <div class="input-group" style="max-width: 80px;">
+                <label>User ID</label>
+                <input type="text" id="userId" value="User01" class="settings-input" placeholder="ID">
+            </div>
+        </div>
+
+        <div class="keys-container">
+            <div class="input-group">
+                <label>Google API Key</label>
+                <input type="text" id="apiKey" class="settings-input" placeholder="הדבק API Key כאן">
+            </div>
+            <div class="input-group">
+                <label>Yemot Token</label>
+                <input type="text" id="yemotToken" class="settings-input" placeholder="הדבק Token כאן">
+            </div>
+        </div>
+    </header>
+
+    <div class="status" id="statusMsg"></div>
+
+    <div id="chat-window">
+        <div class="msg-row bot">
+            <div class="avatar">🤖</div>
+            <div class="message">
+                שלום! אני עוייזר.<br>
+                נא להזין את מפתחות ה-API והטוקן למעלה כדי להתחיל.
+                <span class="timestamp">עכשיו</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="input-area">
+        <button class="send-btn reset-icon" onclick="resetConversation()" title="נקה שיחה">
+            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+        
+        <div class="input-wrapper">
+            <textarea id="messageInput" placeholder="הקלד הודעה..." onkeydown="handleEnter(event)" oninput="autoResize(this)"></textarea>
+        </div>
+        
+        <button class="send-btn active" onclick="sendMessage()">
+            <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+        </button>
+    </div>
+</div>
+
+<script>
+    // ==========================================
+    // הגדרות - הכנס כאן את הקישור שלך (ללא פרמטרים)
+    // ==========================================
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRKxwmubqHK3Te7V63mI7fVUS3jlnNehhyPNodmWB1yq7ifKHrxlFxZ-96g51rj5lagg/exec"; 
+    // ==========================================
+
+    // טעינת הגדרות שמורות בטעינת הדף
+    window.onload = function() {
+        const savedUser = localStorage.getItem('oizer_user_id');
+        const savedApi = localStorage.getItem('oizer_api_key');
+        const savedToken = localStorage.getItem('oizer_yemot_token');
+
+        if (savedUser) document.getElementById('userId').value = savedUser;
+        if (savedApi) document.getElementById('apiKey').value = savedApi;
+        if (savedToken) document.getElementById('yemotToken').value = savedToken;
+    }
+
+    // שמירה אוטומטית בעת שינוי
+    document.getElementById('userId').addEventListener('change', function() { localStorage.setItem('oizer_user_id', this.value); });
+    document.getElementById('apiKey').addEventListener('change', function() { localStorage.setItem('oizer_api_key', this.value); });
+    document.getElementById('yemotToken').addEventListener('change', function() { localStorage.setItem('oizer_yemot_token', this.value); });
+
+    function autoResize(el) {
+        el.style.height = '24px';
+        el.style.height = (el.scrollHeight) + 'px';
+    }
+
+    function handleEnter(e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMessage();
+        }
+    }
+
+    function escapeHtml(text) {
+        if (!text) return text;
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    function formatMessage(text) {
+        const codeBlocks = [];
+        let placeholderText = text.replace(/```(\w*)\s*([\s\S]*?)```/g, function(match, lang, code) {
+            codeBlocks.push({ lang: lang || 'Code', code: code.trim() });
+            return `__CODE_BLOCK_${codeBlocks.length - 1}__`;
+        });
+
+        let formatted = escapeHtml(placeholderText);
+        formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        formatted = formatted.replace(/`([^`\n]+)`/g, '<code class="inline">$1</code>');
+        formatted = formatted.replace(/(?:^|\n)(\d+\.|-|\*)\s+(.*?)(?=\n|$)/g, function(match, prefix, content) {
+            if (prefix.includes('.')) {
+                return `<div class="bot-list-item"><span class="bot-list-number">${prefix}</span> ${content}</div>`;
+            } else {
+                return `<div class="bot-list-item">${content}</div>`;
+            }
+        });
+        formatted = formatted.replace(/\n/g, '<br>');
+        formatted = formatted.replace(/__CODE_BLOCK_(\d+)__/g, function(match, index) {
+            const block = codeBlocks[index];
+            return `
+            <div class="code-container">
+                <div class="code-header">
+                    <span class="code-lang">${block.lang}</span>
+                    <button class="copy-btn" onclick="copyCode(this)">העתק</button>
+                </div>
+                <pre><code>${block.code}</code></pre>
+            </div>`;
+        });
+
+        return formatted;
+    }
+
+    function addMessage(text, sender) {
+        const chatWindow = document.getElementById('chat-window');
+        const row = document.createElement('div');
+        row.classList.add('msg-row', sender);
+        
+        const avatar = document.createElement('div');
+        avatar.classList.add('avatar');
+        avatar.innerText = sender === 'bot' ? '🤖' : '👤'; 
+        
+        const bubble = document.createElement('div');
+        bubble.classList.add('message', sender);
+        
+        const time = new Date().toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+        
+        bubble.innerHTML = formatMessage(text) + `<span class="timestamp">${time}</span>`;
+        
+        if (sender === 'user') {
+            row.appendChild(bubble);
+            row.appendChild(avatar);
+        } else {
+            row.appendChild(avatar);
+            row.appendChild(bubble);
+        }
+        
+        chatWindow.appendChild(row);
+        chatWindow.scrollTo({ top: chatWindow.scrollHeight, behavior: 'smooth' });
+    }
+
+    function copyCode(btn) {
+        const codeBlock = btn.parentElement.nextElementSibling;
+        const codeText = codeBlock.innerText;
+        navigator.clipboard.writeText(codeText).then(() => {
+            const originalText = btn.innerText;
+            btn.innerText = 'V';
+            setTimeout(() => { btn.innerText = originalText; }, 2000);
+        });
+    }
+
+    async function sendMessage(overrideText = null) {
+        const userId = document.getElementById('userId').value.trim();
+        const apiKey = document.getElementById('apiKey').value.trim();
+        const token = document.getElementById('yemotToken').value.trim();
+        const inputField = document.getElementById('messageInput');
+        const textToSend = overrideText || inputField.value.trim();
+        const statusMsg = document.getElementById('statusMsg');
+
+        // בדיקה שכל השדות מלאים
+        if (!apiKey || !token) {
+            alert('חובה להזין API Key ו-Token בחלק העליון של המסך לפני השליחה.');
+            return;
+        }
+
+        if (SCRIPT_URL.includes("XXXX")) {
+            alert('נא להגדיר את כתובת הסקריפט בקוד!');
+            return;
+        }
+
+        if (!textToSend) return;
+
+        addMessage(textToSend, 'user');
+        if (!overrideText) {
+            inputField.value = '';
+            inputField.style.height = '24px'; 
+        }
+        
+        if (!/Mobi|Android/i.test(navigator.userAgent)) inputField.focus();
+
+        statusMsg.innerText = 'מקליד...';
+
+        try {
+            // --- השינוי החשוב: בניית URL עם פרמטרים ---
+            // הוספת המפתחות לכתובת ה-URL עצמה
+            const finalUrl = `${SCRIPT_URL}?API=${encodeURIComponent(apiKey)}&token=${encodeURIComponent(token)}`;
+
+            const response = await fetch(finalUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify({ text: textToSend, ApiPhone: userId })
+            });
+
+            if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+
+            const data = await response.text();
+            
+            let displayResponse = data;
+            if (data.includes("id_list_message=")) {
+                displayResponse = data.replace("id_list_message=t-", "")
+                                      .replace("id_list_message=f-", "קובץ שמע: ");
+            }
+
+            addMessage(displayResponse, 'bot');
+            statusMsg.innerText = '';
+
+        } catch (error) {
+            addMessage(`שגיאה: ${error.message}`, 'bot');
+            statusMsg.innerText = '';
+        }
+    }
+
+    function resetConversation() {
+        if(confirm("למחוק היסטוריה?")) {
+            sendMessage("ABC");
+            setTimeout(() => {
+                document.getElementById('chat-window').innerHTML = ''; 
+                addMessage("השיחה אופסה. איך אפשר לעזור?", 'bot');
+            }, 1000);
+        }
+    }
+</script>
+
+</body>
+</html>

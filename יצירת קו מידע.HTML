@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>הגדרת קו מידע אישי (ימות המשיח)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            font-family: 'Inter', sans-serif;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 flex items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-lg bg-white p-8 rounded-xl shadow-2xl border border-blue-100">
+        <h1 class="text-3xl font-bold text-blue-700 mb-6 text-center border-b pb-3">
+            הגדרת קו מידע אישי
+        </h1>
+        <p class="text-gray-600 mb-6 text-center">
+            הזן את פרטי המערכת להגדרת ההגדרות והעלאת קובץ ה-TTS.
+        </p>
+
+        <form id="configForm" class="space-y-4">
+            <div>
+                <label for="extension" class="block text-sm font-medium text-gray-700">
+                    מספר שלוחה (לדוגמה: 50)
+                </label>
+                <input type="text" id="extension" required
+                       placeholder="מספר השלוחה"
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+                       value=""
+                >
+                <p class="mt-1 text-xs text-gray-500">
+                    הקידומת 'ivr2:' תתווסף אוטומטית.
+                </p>
+            </div>
+
+            <div>
+                <label for="systemToken" class="block text-sm font-medium text-gray-700">
+                    טוקן מערכת
+                </label>
+                <input type="password" id="systemToken" required
+                       placeholder="הטוקן הראשי של המערכת שלך"
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+                >
+            </div>
+
+            <div>
+                <label for="apiKey" class="block text-sm font-medium text-gray-700">
+                    מפתח API (גוגל)
+                </label>
+                <input type="password" id="apiKey" required
+                       placeholder="מפתח ה-API"
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+                >
+            </div>
+
+            <button type="submit" id="submitButton"
+                    class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-lg font-semibold text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
+                עדכן הגדרות והעלה קובץ
+            </button>
+        </form>
+
+        <div id="statusMessage" class="mt-6 p-4 rounded-lg hidden" role="alert"></div>
+        <div id="loadingIndicator" class="mt-6 text-center hidden">
+            <div class="animate-spin inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" role="status">
+                <span class="sr-only">טוען...</span>
+            </div>
+            <p id="loadingText" class="text-blue-600 mt-2">מתחבר לשרת...</p>
+        </div>
+    </div>
+
+    <script>
+        const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyRKxwmubqHK3Te7V63mI7fVUS3jlnNehhyPNodmWB1yq7ifKHrxlFxZ-96g51rj5lagg/exec';
+
+        // פונקציה לביצוע GET (עדכון הגדרות)
+        async function apiGetCall(url) {
+            const response = await fetch(url, { method: 'GET' });
+            if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+            return response;
+        }
+
+        // פונקציה לביצוע POST (העלאת קבצים)
+        async function uploadFileWithPost(token, extensionPath, filename, content) {
+            const uploadUrl = "https://www.call2all.co.il/ym/api/UploadTextFile";
+            
+            const formData = new URLSearchParams();
+            formData.append('token', token);
+            formData.append('what', `${extensionPath}/${filename}`);
+            formData.append('contents', content);
+
+            const response = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+                },
+                body: formData
+            });
+
+            if (!response.ok) throw new Error(`Upload Error: ${response.status}`);
+            return response;
+        }
+
+        function buildUpdateUrl(userInputExtension, systemToken, apiKey) {
+            let fullPathExtension = userInputExtension;
+            if (!fullPathExtension.toLowerCase().startsWith('ivr') && fullPathExtension.length > 0) {
+                fullPathExtension = 'ivr2:' + fullPathExtension;
+            }
+
+            const baseUrl = "https://www.call2all.co.il/ym/api/UpdateExtension";
+            
+            // בניית הפרמטרים בדיוק לפי ההנחיה
+            const params = {
+                token: systemToken,
+                path: fullPathExtension,
+                title: 'קו מידע אישי',
+                type: 'api',
+                api_link: GOOGLE_SCRIPT_URL,
+                api_phone_send: 'yes',
+                
+                // הוספת הקידומת token= בתוך הערך
+                api_add_0: 'token=' + systemToken,
+                
+                // הגדרת ההקלטה
+                api_000: 'path,,record,/Transcription,,no',
+                
+                // ניתוב בסיום
+                api_answer_OK: 'go_to_folder=/1',
+                api_end_goto: '/1',
+                
+                // הוספת הקידומת API= בתוך הערך
+                api_add_1: 'API=' + apiKey,
+            };
+
+            return `${baseUrl}?${new URLSearchParams(params).toString()}`;
+        }
+
+        document.getElementById('configForm').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const submitButton = document.getElementById('submitButton');
+            const statusMessage = document.getElementById('statusMessage');
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            const loadingText = document.getElementById('loadingText');
+
+            const userInputExtension = document.getElementById('extension').value.trim();
+            const systemToken = document.getElementById('systemToken').value.trim();
+            const apiKey = document.getElementById('apiKey').value.trim();
+
+            let fullPath = userInputExtension;
+            if (!fullPath.toLowerCase().startsWith('ivr') && fullPath.length > 0) {
+                fullPath = 'ivr2:' + fullPath;
+            }
+
+            submitButton.disabled = true;
+            statusMessage.classList.add('hidden');
+            loadingIndicator.classList.remove('hidden');
+            
+            try {
+                // שלב 1: עדכון הגדרות השלוחה
+                loadingText.innerText = "מעדכן את הגדרות השלוחה...";
+                const fullUpdateUrl = buildUpdateUrl(userInputExtension, systemToken, apiKey);
+                await apiGetCall(fullUpdateUrl);
+
+                // המתנה קצרה לעדכון בשרת
+                loadingText.innerText = "ממתין לעדכון...";
+                await sleep(2000); 
+
+                // שלב 2: העלאת קובץ TTS
+                loadingText.innerText = "יוצר קובץ שמע (000)...";
+                const ttsContent = "אמרו את שאלתכם והקישו סולמית";
+                
+                await uploadFileWithPost(systemToken, fullPath, '000.tts', ttsContent);
+
+                // סיום בהצלחה
+                loadingIndicator.classList.add('hidden');
+                statusMessage.classList.remove('hidden');
+
+                statusMessage.className = 'mt-6 p-4 rounded-lg bg-green-100 text-green-800';
+                statusMessage.innerHTML = `
+                    <p class="font-bold text-lg">ההגדרות עודכנו בהצלחה!</p>
+                    <ul class="list-disc list-inside mt-2 text-sm">
+                        <li>הגדרות API הוגדרו בשלוחה ${userInputExtension}.</li>
+                        <li>הטוקן וה-API הוזנו במקומות המתאימים.</li>
+                        <li>קובץ 000.tts נוצר עם הטקסט: "${ttsContent}".</li>
+                    </ul>
+                `;
+
+            } catch (finalError) {
+                console.error('Critical Error:', finalError);
+                loadingIndicator.classList.add('hidden');
+                statusMessage.classList.remove('hidden');
+                statusMessage.className = 'mt-6 p-4 rounded-lg bg-red-100 text-red-800';
+                statusMessage.innerHTML = `
+                    <p class="font-bold">שגיאה בתהליך:</p>
+                    <p dir="ltr" class="text-left mt-1 text-sm font-mono">${finalError.message}</p>
+                `;
+            } finally {
+                submitButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
