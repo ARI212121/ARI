@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>מפת כתובות בבני ברק - 3000 נקודות</title>
+    <title>מפת כתובות בבני ברק - הדפסה</title>
     <script src="https://www.govmap.gov.il/govmap/api/govmap.api.js" defer onload="initGovMap()"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.0/proj4.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
         #map-container { width: 100vw; height: 100vh; }
+        
         #loading { 
             position: absolute; 
             top: 50%; left: 50%; 
@@ -21,11 +22,45 @@
             text-align: center;
             font-size: 18px;
         }
+
+        /* עיצוב עבור כפתורי ההדפסה שיצופו מעל המפה */
+        #print-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 1000; /* מוודא שהכפתורים מעל המפה */
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+        }
+
+        #print-controls button {
+            padding: 10px 15px;
+            margin: 0 5px;
+            font-size: 14px;
+            cursor: pointer;
+            background-color: #0056b3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        #print-controls button:hover {
+            background-color: #004494;
+        }
     </style>
 </head>
 <body>
 
     <div id="loading">טוען נתונים ומכין מפה... אנא המתן מעט.</div>
+    
+    <div id="print-controls" style="display: none;">
+        <button onclick="printMap()">🖨️ הדפס מפה</button>
+        <button onclick="closePrintMap()">❌ סגור הדפסה</button>
+    </div>
+
     <div id="map-container"></div>
 
     <script>
@@ -67,82 +102,111 @@
             }
         }
 
-       function drawPointsOnMap(locations) {
-    console.log("מתחיל לצייר " + locations.length + " נקודות...");
-    
-    let wkts = [];
-    let names = [];
-    let tooltips = [];
-    
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    let validPointsCount = 0;
-
-    for (let i = 0; i < locations.length; i++) {
-        const loc = locations[i];
-        if (loc.lat && loc.lng) {
+        // --- פונקציות ההדפסה ---
+        function printMap() {
             try {
-                // המרת הקואורדינטות מגוגל לרשת ישראל
-                const itmCoords = proj4("EPSG:4326", "EPSG:2039", [parseFloat(loc.lng), parseFloat(loc.lat)]);
-                
-                const x = Math.round(itmCoords[0]);
-                const y = Math.round(itmCoords[1]);
-
-                if (x > 130000 && x < 280000 && y > 380000 && y < 800000) {
-                    if(x < minX) minX = x; 
-                    if(x > maxX) maxX = x;
-                    if(y < minY) minY = y; 
-                    if(y > maxY) maxY = y;
-
-                    // בניית המחרוזת בפורמט WKT
-                    wkts.push("POINT(" + x + " " + y + ")");
-                    names.push("p" + i);
-                    tooltips.push(loc.address || "נקודת ציון");
-                    
-                    validPointsCount++;
-                }
+                govmap.showPrint();
             } catch (e) {
-                console.error("שגיאה בהמרת נקודה:", e);
+                console.error("שגיאה בפתיחת חלון הדפסה:", e);
+                alert("אירעה שגיאה בפתיחת חלון ההדפסה.");
             }
         }
-    }
 
-    if (validPointsCount > 0) {
-        setTimeout(function() {
+        function closePrintMap() {
             try {
-                // ווידוא שהסוג הגאומטרי נשאב נכון מהספרייה
-                const pointType = govmap.drawType ? govmap.drawType.Point : 0;
+                govmap.closePrint();
+            } catch (e) {
+                console.error("שגיאה בסגירת חלון הדפסה:", e);
+            }
+        }
+        // -----------------------
 
-                const geometryParams = {
-                    wkts: wkts,
-                    names: names,
-                    geometryType: pointType,
-                    defaultSymbol: {
-                        url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png',
-                        width: 32,
-                        height: 32
-                    },
-                    clearExistings: true, // שים לב ל-s בסוף
-                    showBubble: true,
-                    data: {
-                        tooltips: tooltips
+        function drawPointsOnMap(locations) {
+            console.log("מתחיל לצייר " + locations.length + " נקודות...");
+            
+            let wkts = [];
+            let names = [];
+            let tooltips = [];
+            
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            let validPointsCount = 0;
+
+            for (let i = 0; i < locations.length; i++) {
+                const loc = locations[i];
+                if (loc.lat && loc.lng) {
+                    try {
+                        const itmCoords = proj4("EPSG:4326", "EPSG:2039", [parseFloat(loc.lng), parseFloat(loc.lat)]);
+                        
+                        const x = Math.round(itmCoords[0]);
+                        const y = Math.round(itmCoords[1]);
+
+                        if (x > 130000 && x < 280000 && y > 380000 && y < 800000) {
+                            if(x < minX) minX = x; 
+                            if(x > maxX) maxX = x;
+                            if(y < minY) minY = y; 
+                            if(y > maxY) maxY = y;
+
+                            wkts.push("POINT(" + x + " " + y + ")");
+                            names.push("p" + i);
+                            tooltips.push(loc.address || "נקודת ציון");
+                            
+                            validPointsCount++;
+                        }
+                    } catch (e) {
+                        console.error("שגיאה בהמרת נקודה:", e);
                     }
-                };
-                
-                console.log("פרמטרים שנשלחים ל-GovMap:", geometryParams);
+                }
+            }
 
-                govmap.displayGeometries(geometryParams).then(function(response) {
-                    console.log("תשובת שרת גובמפס לאחר ציור:", response);
-                }).catch(function(err) {
-                    console.error("שגיאת פנימית של GovMap בעת הציור:", err);
-                });
+            if (validPointsCount > 0) {
+                setTimeout(function() {
+                    try {
+                        const pointType = govmap.drawType ? govmap.drawType.Point : 0;
 
-                // ביצוע זום
-                const marginX = (maxX - minX) * 0.05;
-                const marginY = (maxY - minY) * 0
+                        const geometryParams = {
+                            wkts: wkts,
+                            names: names,
+                            geometryType: pointType,
+                            defaultSymbol: {
+                                url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png', // עודכן ל-HTTPS תקין
+                                width: 32,
+                                height: 32
+                            },
+                            clearExistings: true,
+                            showBubble: true,
+                            data: {
+                                tooltips: tooltips
+                            }
+                        };
+
+                        govmap.displayGeometries(geometryParams).then(function(response) {
+                            console.log("תשובת שרת גובמפס לאחר ציור:", response);
+                        }).catch(function(err) {
+                            console.error("שגיאת פנימית של GovMap בעת הציור:", err);
+                        });
+
+                        const marginX = (maxX - minX) * 0.05;
+                        const marginY = (maxY - minY) * 0.05;
+                        govmap.zoomToExtent({ 
+                            xmin: minX - marginX, 
+                            ymin: minY - marginY, 
+                            xmax: maxX + marginX, 
+                            ymax: maxY + marginY 
+                        });
+                        
+                        document.getElementById('loading').style.display = 'none';
+                        // הצגת כפתורי ההדפסה רק לאחר שהמפה סיימה להיטען
+                        document.getElementById('print-controls').style.display = 'block';
+
+                    } catch (err) {
+                        console.error("שגיאה בהכנת הנתונים לציור:", err);
+                        document.getElementById('loading').innerText = "אירעה שגיאה בציור הנקודות.";
+                    }
+                }, 500);
+            } else {
+                document.getElementById('loading').innerText = "לא נמצאו נקודות עם קואורדינטות בתוך שטח ישראל.";
+            }
+        }
     </script>
 </body>
-
 </html>
-
-
-
