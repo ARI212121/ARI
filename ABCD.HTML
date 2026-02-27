@@ -41,6 +41,31 @@
             font-weight: bold;
         }
 
+        /* סרגל חיפוש עליון */
+        #search-panel {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        #search-input {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            width: 300px;
+            font-family: inherit;
+        }
+
         /* סרגל ניווט תחתון שמרחף מעל המפה */
         #controls-panel {
             position: absolute;
@@ -80,6 +105,11 @@
     <div id="loading">טוען נתונים מהשרת... אנא המתן.</div>
     
     <div id="map-container"></div>
+
+    <div id="search-panel">
+        <input type="text" id="search-input" placeholder="הזן כתובת (למשל: רחוב ועיר)..." onkeypress="handleEnter(event)">
+        <button class="btn-primary" onClick="searchAddress()">🔍 חפש במפה</button>
+    </div>
     
     <div id="controls-panel">
         <div class="row">
@@ -119,6 +149,57 @@
                 }
             });
         }
+
+        // --- פונקציות החיפוש החדשות ---
+        function handleEnter(event) {
+            if (event.key === "Enter") {
+                searchAddress();
+            }
+        }
+
+        function searchAddress() {
+            const keyword = document.getElementById('search-input').value;
+            if (!keyword) return;
+
+            // שימוש ב-FullResult נותן גמישות רבה יותר לשגיאות הקלדה או כתובות חלקיות
+            govmap.geocode({ keyword: keyword, type: govmap.geocodeType.FullResult })
+                .then(function(response) {
+                    if (response && response.data && response.data.length > 0) {
+                        const result = response.data[0];
+
+                        // בדיקה אם קיבלנו מיקום מדויק (בדרך כלל כש- ResultCode שווה 1 או 2)
+                        if (result.X && result.Y) {
+                            // התמקדות לאזור שנמצא ברמת זום טובה לרחוב
+                            govmap.zoomToXY({ x: result.X, y: result.Y, level: 10 });
+                            
+                            // ציור סמן כחול לתוצאת החיפוש מבלי למחוק את נקודות האזור הקיימות
+                            govmap.displayGeometries({
+                                wkts: ["POINT(" + result.X + " " + result.Y + ")"],
+                                names: ["search_marker"],
+                                geometryType: 0,
+                                defaultSymbol: {
+                                    url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+                                    width: 32,
+                                    height: 32
+                                },
+                                clearExistings: false,
+                                data: { tooltips: [result.Values[0] || keyword] }
+                            });
+                        } else if (result.ResultCode === 3) {
+                            alert("נמצאו מספר תוצאות או שהחיפוש כללי מדי. אנא נסה למקד (לדוגמה: 'הרוקמים 26 חולון').");
+                        } else {
+                            alert("לא נמצא מיקום מדויק על המפה.");
+                        }
+                    } else {
+                        alert("לא נמצאו תוצאות עבור החיפוש: " + keyword);
+                    }
+                })
+                .catch(function(error) {
+                    console.error("שגיאה בחיפוש הכתובת:", error);
+                    alert("אירעה שגיאה מול שרת המפות. נסה שוב מאוחר יותר.");
+                });
+        }
+        // ---------------------------------
 
         async function startApp() {
             if (!isGovMapLoaded) return; 
@@ -227,7 +308,7 @@
                     names: names,
                     geometryType: 0,
                     defaultSymbol: {
-                        url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png', 
+                        url: 'https://maps.google.com/mapfiles/ms/icons/red-dot.png', /* תוקן כאן התחביר שהיה חתוך */
                         width: 24,
                         height: 24
                     },
