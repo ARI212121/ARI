@@ -13,52 +13,96 @@
 </head>
 <body class="bg-gray-50 flex items-center justify-center min-h-screen p-4">
 
-    <div class="w-full max-w-lg bg-white p-8 rounded-xl shadow-2xl border border-blue-100">
+    <div class="w-full max-w-lg bg-white p-8 rounded-xl shadow-2xl border border-blue-100 my-8">
         <h1 class="text-3xl font-bold text-blue-700 mb-6 text-center border-b pb-3">
             הגדרת קו מידע אישי
         </h1>
         <p class="text-gray-600 mb-6 text-center">
-            הזן את פרטי המערכת להגדרת ההגדרות והעלאת קובץ ה-TTS.
+            הזן את פרטי המערכת להגדרת ההגדרות והעלאת קובץ ה-ext.ini.
         </p>
 
         <form id="configForm" class="space-y-4">
+            
+            <!-- 1. שלוחת השאלות -->
             <div>
-                <label for="extension" class="block text-sm font-medium text-gray-700">
-                    מספר שלוחה (לדוגמה: 50)
+                <label for="questionsExt" class="block text-sm font-medium text-gray-700">
+                    1. שלוחת השאלות (לדוגמה: 50)
                 </label>
-                <input type="text" id="extension" required
+                <input type="text" id="questionsExt" required
                        placeholder="מספר השלוחה"
                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
-                       value=""
                 >
                 <p class="mt-1 text-xs text-gray-500">
                     הקידומת 'ivr2:' תתווסף אוטומטית.
                 </p>
             </div>
 
+            <!-- 2. מפתח API -->
             <div>
-                <label for="systemToken" class="block text-sm font-medium text-gray-700">
-                    טוקן מערכת
+                <label for="apiKey" class="block text-sm font-medium text-gray-700">
+                    2. מפתח API (גוגל)
                 </label>
-                <input type="password" id="systemToken" required
-                       placeholder="הטוקן הראשי של המערכת שלך"
+                <input type="password" id="apiKey" required
+                       placeholder="הזן מפתח API"
                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
                 >
             </div>
 
+            <!-- 3. שם מודל -->
             <div>
-                <label for="apiKey" class="block text-sm font-medium text-gray-700">
-                    מפתח API (גוגל)
+                <label for="modelName" class="block text-sm font-medium text-gray-700">
+                    3. סוג מודל
                 </label>
-                <input type="password" id="apiKey" required
-                       placeholder="מפתח ה-API"
+                <select id="modelName" required
+                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out">
+                    <option value="" disabled selected>בחר מודל...</option>
+                    <option value="gemini-2.5-flash">א. ג'מיני 2.5 פלאש יציב ואמין</option>
+                    <option value="gemini-flash-lite-latest">ב. ג'מיני 3.1 פלש לייט מהיר</option>
+                    <option value="gemini-pro-latest">ג. ג'מיני 3.1 פרו איטי מתקדם ויקר</option>
+                </select>
+            </div>
+
+            <!-- 4. שלוחת התשובות -->
+            <div>
+                <label for="answersExt" class="block text-sm font-medium text-gray-700">
+                    4. שלוחת התשובות
+                </label>
+                <input type="text" id="answersExt" required
+                       placeholder="הזן את מספר שלוחת התשובות"
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+                >
+                <p class="mt-1 text-xs text-gray-500">
+                    הקידומת 'ivr2:' תתווסף אוטומטית. לשלוחה זו ייכנסו הגדרות הקו.
+                </p>
+            </div>
+
+            <!-- 5. סוג קריינות -->
+            <div>
+                <label for="ttsMode" class="block text-sm font-medium text-gray-700">
+                    5. סוג קריינות
+                </label>
+                <select id="ttsMode" required
+                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out">
+                    <option value="" disabled selected>בחר סוג קריינות...</option>
+                    <option value="1">קריינות ג'מיני-איטית ומתקדמת</option>
+                    <option value="2">קריינות גוגל קלואוד- מהירה ופשוטה</option>
+                </select>
+            </div>
+
+            <!-- 6. טוקן של הקו -->
+            <div>
+                <label for="systemToken" class="block text-sm font-medium text-gray-700">
+                    6. טוקן של הקו
+                </label>
+                <input type="password" id="systemToken" required
+                       placeholder="טוקן המערכת שלך"
                        class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
                 >
             </div>
 
             <button type="submit" id="submitButton"
                     class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-lg font-semibold text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition duration-200 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed">
-                עדכן הגדרות והעלה קובץ
+                עדכן הגדרות בשלוחה
             </button>
         </form>
 
@@ -67,13 +111,12 @@
             <div class="animate-spin inline-block w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full" role="status">
                 <span class="sr-only">טוען...</span>
             </div>
-            <p id="loadingText" class="text-blue-600 mt-2">מתחבר לשרת...</p>
+            <p id="loadingText" class="text-blue-600 mt-2">מעבד נתונים...</p>
         </div>
     </div>
 
     <script>
         const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-        const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyRKxwmubqHK3Te7V63mI7fVUS3jlnNehhyPNodmWB1yq7ifKHrxlFxZ-96g51rj5lagg/exec';
 
         // פונקציה לביצוע GET (עדכון הגדרות)
         async function apiGetCall(url) {
@@ -103,8 +146,8 @@
             return response;
         }
 
-        function buildUpdateUrl(userInputExtension, systemToken, apiKey) {
-            let fullPathExtension = userInputExtension;
+        function buildUpdateUrl(answersExt, questionsExt, systemToken, apiKey, modelName, ttsMode) {
+            let fullPathExtension = answersExt;
             if (!fullPathExtension.toLowerCase().startsWith('ivr') && fullPathExtension.length > 0) {
                 fullPathExtension = 'ivr2:' + fullPathExtension;
             }
@@ -117,21 +160,14 @@
                 path: fullPathExtension,
                 title: 'קו מידע אישי',
                 type: 'api',
-                api_link: GOOGLE_SCRIPT_URL,
-                api_phone_send: 'yes',
-                
-                // הוספת הקידומת token= בתוך הערך
+                api_link: 'https://falling-bread-4a2e.a0533161397.workers.dev/',
                 api_add_0: 'token=' + systemToken,
-                
-                // הגדרת ההקלטה
-                api_000: 'path,,record,/Transcription,,no',
-                
-                // ניתוב בסיום
-                api_answer_OK: 'go_to_folder=/1',
-                api_end_goto: '/1',
-                
-                // הוספת הקידומת API= בתוך הערך
-                api_add_1: 'API=' + apiKey,
+                api_add_1: 'SHM=' + questionsExt,
+                api_hangup_send: 'no',
+                api_add_2: 'SHL=' + answersExt,
+                api_add_3: 'API=' + apiKey,
+                api_add_4: 'MODEL=' + modelName,
+                api_add_5: 'KR=' + ttsMode
             };
 
             return `${baseUrl}?${new URLSearchParams(params).toString()}`;
@@ -145,13 +181,16 @@
             const loadingIndicator = document.getElementById('loadingIndicator');
             const loadingText = document.getElementById('loadingText');
 
-            const userInputExtension = document.getElementById('extension').value.trim();
-            const systemToken = document.getElementById('systemToken').value.trim();
+            const questionsExt = document.getElementById('questionsExt').value.trim();
             const apiKey = document.getElementById('apiKey').value.trim();
+            const modelName = document.getElementById('modelName').value;
+            const answersExt = document.getElementById('answersExt').value.trim();
+            const ttsMode = document.getElementById('ttsMode').value;
+            const systemToken = document.getElementById('systemToken').value.trim();
 
-            let fullPath = userInputExtension;
-            if (!fullPath.toLowerCase().startsWith('ivr') && fullPath.length > 0) {
-                fullPath = 'ivr2:' + fullPath;
+            let fullPathQuestions = questionsExt;
+            if (!fullPathQuestions.toLowerCase().startsWith('ivr') && fullPathQuestions.length > 0) {
+                fullPathQuestions = 'ivr2:' + fullPathQuestions;
             }
 
             submitButton.disabled = true;
@@ -161,7 +200,7 @@
             try {
                 // שלב 1: עדכון הגדרות השלוחה
                 loadingText.innerText = "מעדכן את הגדרות השלוחה...";
-                const fullUpdateUrl = buildUpdateUrl(userInputExtension, systemToken, apiKey);
+                const fullUpdateUrl = buildUpdateUrl(answersExt, questionsExt, systemToken, apiKey, modelName, ttsMode);
                 await apiGetCall(fullUpdateUrl);
 
                 // המתנה קצרה לעדכון בשרת
@@ -172,19 +211,23 @@
                 loadingText.innerText = "יוצר קובץ שמע (000)...";
                 const ttsContent = "אמרו את שאלתכם והקישו סולמית";
                 
-                await uploadFileWithPost(systemToken, fullPath, '000.tts', ttsContent);
+                await uploadFileWithPost(systemToken, fullPathQuestions, '000.tts', ttsContent);
 
                 // סיום בהצלחה
                 loadingIndicator.classList.add('hidden');
                 statusMessage.classList.remove('hidden');
 
+                const selectedModelText = document.getElementById('modelName').options[document.getElementById('modelName').selectedIndex].text;
+                const selectedTtsText = document.getElementById('ttsMode').options[document.getElementById('ttsMode').selectedIndex].text;
+
                 statusMessage.className = 'mt-6 p-4 rounded-lg bg-green-100 text-green-800';
                 statusMessage.innerHTML = `
                     <p class="font-bold text-lg">ההגדרות עודכנו בהצלחה!</p>
                     <ul class="list-disc list-inside mt-2 text-sm">
-                        <li>הגדרות API הוגדרו בשלוחה ${userInputExtension}.</li>
-                        <li>הטוקן וה-API הוזנו במקומות המתאימים.</li>
-                        <li>קובץ 000.tts נוצר עם הטקסט: "${ttsContent}".</li>
+                        <li>הגדרות ה-API נשמרו בהצלחה בשלוחת התשובות (${answersExt}).</li>
+                        <li>קובץ 000.tts נוצר בשלוחת השאלות (${questionsExt}).</li>
+                        <li><strong>מודל שנבחר:</strong> ${selectedModelText}</li>
+                        <li><strong>קריינות שנבחרה:</strong> ${selectedTtsText}</li>
                     </ul>
                 `;
 
