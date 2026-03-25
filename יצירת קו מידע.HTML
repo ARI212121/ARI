@@ -48,6 +48,17 @@
                 >
             </div>
 
+            <!-- מפתח API לגיבוי -->
+            <div>
+                <label for="backupApiKey" class="block text-sm font-medium text-gray-700">
+                    מפתח API לגיבוי
+                </label>
+                <input type="password" id="backupApiKey" required
+                       placeholder="הזן מפתח API לגיבוי"
+                       class="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out"
+                >
+            </div>
+
             <!-- 3. שם מודל -->
             <div>
                 <label for="modelName" class="block text-sm font-medium text-gray-700">
@@ -146,7 +157,7 @@
             return response;
         }
 
-        function buildUpdateUrl(answersExt, questionsExt, systemToken, apiKey, modelName, ttsMode) {
+        function buildUpdateUrl(answersExt, questionsExt, systemToken, apiKey, modelName, ttsMode, backupApiKey) {
             let fullPathExtension = answersExt;
             if (!fullPathExtension.toLowerCase().startsWith('ivr') && fullPathExtension.length > 0) {
                 fullPathExtension = 'ivr2:' + fullPathExtension;
@@ -167,7 +178,8 @@
                 api_add_2: 'SHL=' + answersExt,
                 api_add_3: 'API=' + apiKey,
                 api_add_4: 'MODEL=' + modelName,
-                api_add_5: 'KR=' + ttsMode
+                api_add_5: 'KR=' + ttsMode,
+                api_add_6: 'KEY2=' + backupApiKey
             };
 
             return `${baseUrl}?${new URLSearchParams(params).toString()}`;
@@ -183,6 +195,7 @@
 
             const questionsExt = document.getElementById('questionsExt').value.trim();
             const apiKey = document.getElementById('apiKey').value.trim();
+            const backupApiKey = document.getElementById('backupApiKey').value.trim();
             const modelName = document.getElementById('modelName').value;
             const answersExt = document.getElementById('answersExt').value.trim();
             const ttsMode = document.getElementById('ttsMode').value;
@@ -200,7 +213,7 @@
             try {
                 // שלב 1: עדכון הגדרות השלוחה
                 loadingText.innerText = "מעדכן את הגדרות השלוחה...";
-                const fullUpdateUrl = buildUpdateUrl(answersExt, questionsExt, systemToken, apiKey, modelName, ttsMode);
+                const fullUpdateUrl = buildUpdateUrl(answersExt, questionsExt, systemToken, apiKey, modelName, ttsMode, backupApiKey);
                 await apiGetCall(fullUpdateUrl);
 
                 // המתנה קצרה לעדכון בשרת
