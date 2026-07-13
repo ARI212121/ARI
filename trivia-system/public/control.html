@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>שולחן שליטה - מערכת הצבעות</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27><text y=%2780%27 font-size=%2780%27>📊</text></svg>">
+<style>
+  :root {
+    --surface: #101014; --surface-2: #1a1a21; --surface-3: #23232c;
+    --text-1: #fff; --text-2: #c3c2c9; --text-3: #8a8994;
+    --accent: #3987e5; --good: #34c26b; --bad: #e66767; --warn: #c98500;
+    --track: #26262e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', 'Heebo', Arial, sans-serif; background: var(--surface); color: var(--text-1); min-height: 100vh; padding: 20px; }
+  h1 { font-size: 1.4rem; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  h2 { font-size: 1.05rem; color: var(--text-2); margin-bottom: 10px; }
+  .status-chip { font-size: .85rem; border-radius: 20px; padding: 4px 14px; background: var(--surface-3); color: var(--text-3); }
+  .status-chip.on { background: color-mix(in srgb, var(--good) 22%, transparent); color: var(--good); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; margin-top: 18px; }
+  .card { background: var(--surface-2); border-radius: 16px; padding: 18px; }
+  button {
+    font-family: inherit; font-size: 1rem; font-weight: 600; cursor: pointer;
+    background: var(--surface-3); color: var(--text-1); border: none; border-radius: 10px; padding: 10px 16px;
+    transition: filter .15s;
+  }
+  button:hover { filter: brightness(1.2); }
+  button.primary { background: var(--accent); }
+  button.good { background: var(--good); color: #06220f; }
+  button.bad { background: var(--bad); color: #2a0808; }
+  button.warn { background: var(--warn); color: #221600; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  input, select {
+    font-family: inherit; font-size: 1rem; background: var(--surface); color: var(--text-1);
+    border: 1px solid var(--track); border-radius: 10px; padding: 9px 12px;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); }
+  #question-now { font-size: 1.2rem; font-weight: 700; margin-bottom: 6px; }
+  #question-meta { color: var(--text-3); font-size: .9rem; margin-bottom: 12px; }
+  .mini-bars { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+  .mini-bar { display: grid; grid-template-columns: 110px 1fr 84px; gap: 10px; align-items: center; font-size: .92rem; }
+  .mini-track { background: var(--track); height: 14px; border-radius: 7px; overflow: hidden; }
+  .mini-fill { height: 100%; border-radius: 0 7px 7px 0; transition: width .6s; }
+  .num { font-variant-numeric: tabular-nums; color: var(--text-2); text-align: end; }
+  #toast {
+    position: fixed; bottom: 20px; right: 50%; transform: translateX(50%);
+    background: var(--surface-3); border-radius: 12px; padding: 12px 22px; display: none; z-index: 99;
+    border: 1px solid var(--track); font-weight: 600;
+  }
+  #toast.err { border-color: var(--bad); color: var(--bad); }
+  .rename-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 6px; margin-bottom: 8px; align-items: center; }
+  .rename-row input { min-width: 0; width: 100%; }
+  .rename-row button { padding: 8px 10px; font-size: .88rem; white-space: nowrap; }
+  .digit-chip { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-3); font-weight: 800; }
+  a { color: var(--accent); }
+  .login-box { max-width: 420px; margin: 12vh auto; text-align: center; display: flex; flex-direction: column; gap: 14px; }
+</style>
+</head>
+<body>
+
+<div id="login" class="login-box" style="display:none">
+  <h1 style="justify-content:center">🎛️ שולחן שליטה</h1>
+  <p style="color:var(--text-3)">הזינו את טוקן הניהול (ADMIN_TOKEN שהוגדר ב-Cloudflare)</p>
+  <input id="token-input" type="password" placeholder="טוקן ניהול" style="text-align:center">
+  <button class="primary" onclick="saveToken()">כניסה</button>
+</div>
+
+<div id="app" style="display:none">
+  <h1>
+    🎛️ שולחן שליטה
+    <span class="status-chip" id="display-status">תצוגה: לא מחוברת</span>
+    <span class="status-chip" id="server-status">שרת: בודק...</span>
+    <span style="flex:1"></span>
+    <button onclick="openDisplay()" class="primary">🖥️ פתח חלון תצוגה</button>
+    <a href="admin.html" style="font-size:.9rem">→ לממשק הניהול המלא</a>
+  </h1>
+
+  <div class="grid">
+    <!-- מצב חי -->
+    <div class="card">
+      <h2>📊 השאלה הפעילה</h2>
+      <div id="question-now">אין שאלה פעילה</div>
+      <div id="question-meta"></div>
+      <div class="row">
+        <button class="good" onclick="serverToggleResults(true)">👁️ הצג תוצאות</button>
+        <button onclick="serverToggleResults(false)">🙈 הסתר תוצאות</button>
+        <button class="warn" onclick="revealCorrect()">✓ חשוף תשובה נכונה</button>
+      </div>
+      <div class="row">
+        <button class="bad" onclick="closeQuestion()">⏹️ סגור הצבעה</button>
+        <button class="primary" onclick="nextQuestion()">⏭️ שאלה הבאה בתור</button>
+      </div>
+      <div class="mini-bars" id="mini-bars"></div>
+    </div>
+
+    <!-- זמן -->
+    <div class="card">
+      <h2>⏱️ הארכת זמן לכלל המשתמשים</h2>
+      <div class="row">
+        <button onclick="extend(15)">+15 שנ'</button>
+        <button onclick="extend(30)">+30 שנ'</button>
+        <button onclick="extend(60)">+60 שנ'</button>
+        <button onclick="extend(180)">+3 דק'</button>
+      </div>
+      <div class="row">
+        <input id="extend-custom" type="number" placeholder="שניות" style="width:110px">
+        <button onclick="extend(Number(document.getElementById('extend-custom').value))">הארך</button>
+        <button class="bad" onclick="extend(-15)">-15 שנ' (קיצור)</button>
+      </div>
+      <div id="time-left" style="font-size:2rem;font-weight:800;font-variant-numeric:tabular-nums;margin-top:8px">--:--</div>
+    </div>
+
+    <!-- שמות בזמן אמת -->
+    <div class="card">
+      <h2>✏️ שינוי שמות בזמן אמת</h2>
+      <div id="rename-list" style="color:var(--text-3)">אין אפשרויות פעילות</div>
+      <div class="row" style="margin-top:8px">
+        <button onclick="clearRenames()">↺ בטל שינויים מקומיים בתצוגה</button>
+      </div>
+      <p style="color:var(--text-3);font-size:.82rem">"מקומי" משנה רק את חלון התצוגה מיידית. "שמור" מעדכן את מסד הנתונים ואת הטלפון.</p>
+    </div>
+
+    <!-- אפקטים ותצוגה -->
+    <div class="card">
+      <h2>✨ שליטה ישירה בחלון התצוגה</h2>
+      <div class="row">
+        <button onclick="cmd({type:'confetti'})">🎉 קונפטי</button>
+        <button onclick="cmd({type:'reveal_winner', dim:true})">🏆 הכרזת מנצח</button>
+        <button onclick="cmd({type:'clear_reveal'})">↺ בטל הכרזה</button>
+      </div>
+      <div class="row">
+        <button onclick="cmd({type:'theme', value:'dark'})">🌙 כהה</button>
+        <button onclick="cmd({type:'theme', value:'light'})">☀️ בהיר</button>
+        <select id="zoom" onchange="cmd({type:'zoom', value:this.value})">
+          <option value="0.8">זום 80%</option>
+          <option value="1" selected>זום 100%</option>
+          <option value="1.2">זום 120%</option>
+          <option value="1.5">זום 150%</option>
+        </select>
+      </div>
+      <div class="row">
+        <input id="overlay-text" placeholder="הודעת ענק על המסך" style="flex:1">
+        <button onclick="cmd({type:'overlay', text:document.getElementById('overlay-text').value})">הצג</button>
+        <button onclick="cmd({type:'overlay', text:''})">נקה</button>
+      </div>
+      <div class="row">
+        <input id="ticker-text" placeholder="כיתוב רץ בתחתית (נשמר בשרת)" style="flex:1">
+        <button onclick="setTicker()">שמור</button>
+        <button onclick="document.getElementById('ticker-text').value='';setTicker()">נקה</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+let TOKEN = localStorage.getItem('ari-admin-token') || '';
+let state = null;
+let displayWin = null;
+let displayAlive = 0;
+
+/* ---------- התחברות ---------- */
+function saveToken() {
+  TOKEN = $('token-input').value.trim();
+  localStorage.setItem('ari-admin-token', TOKEN);
+  location.reload();
+}
+if (!TOKEN) { $('login').style.display = 'flex'; }
+else { $('app').style.display = 'block'; }
+
+/* ---------- API ---------- */
+async function api(path, method = 'GET', body) {
+  const res = await fetch('/api' + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401) {
+    localStorage.removeItem('ari-admin-token');
+    toast('טוקן שגוי - התחברו מחדש', true);
+    setTimeout(() => location.reload(), 1200);
+    throw new Error('401');
+  }
+  if (!res.ok) { toast(data.error || 'שגיאה', true); throw new Error(data.error); }
+  return data;
+}
+
+function toast(msg, isErr = false) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = isErr ? 'err' : '';
+  t.style.display = 'block';
+  clearTimeout(t._h);
+  t._h = setTimeout(() => (t.style.display = 'none'), 2600);
+}
+
+/* ---------- תקשורת ישירה עם חלון התצוגה ---------- */
+const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('ari-trivia') : null;
+if (bc) {
+  bc.onmessage = (ev) => {
+    if (ev.data?.type === 'display_ready') { displayAlive = Date.now(); updateDisplayChip(); }
+  };
+}
+function updateDisplayChip() {
+  const connected = Date.now() - displayAlive < 4000;
+  const chip = $('display-status');
+  chip.textContent = connected ? 'תצוגה: מחוברת ✓' : 'תצוגה: לא מחוברת';
+  chip.classList.toggle('on', connected);
+}
+function cmd(c) {
+  bc?.postMessage(c);
+  // גיבוי דרך localStorage לדפדפנים בלי BroadcastChannel
+  localStorage.setItem('ari-trivia-cmd', JSON.stringify({ cmd: c, t: Date.now() }));
+  toast('נשלח לתצוגה');
+}
+function openDisplay() {
+  displayWin = window.open('display.html', 'ari-display', 'popup,width=1280,height=720');
+  setTimeout(() => bc?.postMessage({ type: 'ping' }), 800);
+}
+bc?.postMessage({ type: 'ping' });
+setInterval(() => {
+  bc?.postMessage({ type: 'ping' });
+  updateDisplayChip();
+}, 2000);
+
+/* ---------- פעולות שרת ---------- */
+async function serverToggleResults(visible) {
+  await api('/admin/settings', 'POST', { results_visible_on_display: visible });
+  cmd({ type: 'hide_results', value: null }); // ביטול דריסה מקומית
+  toast(visible ? 'תוצאות מוצגות' : 'תוצאות מוסתרות');
+}
+async function revealCorrect() {
+  await api('/admin/settings', 'POST', { reveal_correct: true, results_visible_on_display: true });
+  cmd({ type: 'confetti' });
+  toast('התשובה הנכונה נחשפה');
+}
+async function closeQuestion() {
+  if (!state?.question) return toast('אין שאלה פעילה', true);
+  await api(`/admin/questions/${state.question.id}/close`, 'POST', {});
+  toast('ההצבעה נסגרה');
+}
+async function nextQuestion() {
+  // סגירת הנוכחית והפעלת הבאה בתור נעשות בצד השרת דרך פעולת activate של הבאה
+  const { questions } = await api('/admin/questions');
+  const next = questions.find((q) => q.status === 'draft');
+  if (!next) return toast('אין שאלה במצב טיוטה בתור', true);
+  await api(`/admin/questions/${next.id}/activate`, 'POST', {});
+  await api('/admin/settings', 'POST', { reveal_correct: false });
+  toast(`הופעלה: ${next.title}`);
+}
+async function extend(seconds) {
+  if (!seconds) return;
+  if (!state?.question) return toast('אין שאלה פעילה', true);
+  const r = await api(`/admin/questions/${state.question.id}/extend`, 'POST', { seconds });
+  toast(`זמן עודכן ב-${seconds} שניות`);
+}
+async function setTicker() {
+  await api('/admin/settings', 'POST', { display_message: $('ticker-text').value });
+  toast('כיתוב רץ עודכן');
+}
+function clearRenames() { cmd({ type: 'clear_renames' }); }
+
+/* ---------- שינוי שמות ---------- */
+function renderRenames() {
+  const list = $('rename-list');
+  const opts = state?.question?.options || [];
+  if (!opts.length) { list.textContent = 'אין אפשרויות פעילות'; return; }
+  if (list.dataset.key === state.question.id) return; // לא לדרוס בזמן הקלדה
+  list.dataset.key = state.question.id;
+  list.innerHTML = opts.map((o) => `
+    <div class="rename-row">
+      <span class="digit-chip">${o.digit}</span>
+      <input value="${escapeHtml(o.label)}" id="rn-${o.digit}">
+      <button onclick="cmd({type:'rename', digit:${o.digit}, name:document.getElementById('rn-${o.digit}').value})">מקומי</button>
+      <button class="primary" onclick="saveRename(${o.digit})">שמור</button>
+    </div>`).join('');
+}
+async function saveRename(digit) {
+  const name = $('rn-' + digit).value.trim();
+  if (!name || !state?.question) return;
+  const { questions } = await api('/admin/questions');
+  const q = questions.find((x) => x.id === state.question.id);
+  if (!q) return;
+  const options = q.options.map((o) => Number(o.digit) === digit ? { ...o, label: name } : o);
+  await api(`/admin/questions/${q.id}`, 'PATCH', { options });
+  cmd({ type: 'rename', digit, name });
+  toast('השם עודכן בכל המערכת');
+}
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/* ---------- רענון מצב ---------- */
+async function refresh() {
+  try {
+    const res = await fetch('/api/public/state', { cache: 'no-store' });
+    state = await res.json();
+    $('server-status').textContent = 'שרת: מחובר ✓';
+    $('server-status').classList.add('on');
+  } catch {
+    $('server-status').textContent = 'שרת: שגיאה';
+    $('server-status').classList.remove('on');
+    return;
+  }
+  const q = state.question;
+  $('question-now').textContent = q ? q.title : 'אין שאלה פעילה';
+  $('question-meta').textContent = q
+    ? `סטטוס: ${q.status === 'active' ? 'פתוחה' : 'סגורה'} | סוג: ${q.kind} | שקלול שופטים: ${q.judges_weight}%`
+    : '';
+
+  const bars = $('mini-bars');
+  const opts = state.results?.options || [];
+  bars.innerHTML = opts.map((o) => `
+    <div class="mini-bar">
+      <span>${escapeHtml(o.label)}</span>
+      <div class="mini-track"><div class="mini-fill" style="width:${o.final_pct ?? 0}%;background:${o.color || 'var(--accent)'}"></div></div>
+      <span class="num">${o.final_pct === null ? 'מוסתר' : (o.final_pct + '% (' + o.votes + ')')}</span>
+    </div>`).join('');
+
+  const left = q?.seconds_left;
+  $('time-left').textContent = left === null || left === undefined
+    ? (q ? 'ללא הגבלה' : '--:--')
+    : `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+
+  renderRenames();
+}
+if (TOKEN) { refresh(); setInterval(refresh, 1500); }
+</script>
+</body>
+</html>
