@@ -2,10 +2,10 @@ name = "trivia-ivr"
 main = "src/worker.js"
 compatibility_date = "2025-01-01"
 
-# קבצי הממשקים מוגשים ישירות מה-Worker
-[assets]
-directory = "./public"
-binding = "ASSETS"
+# דפי הממשקים מוטמעים בתוך ה-Worker (src/pages.generated.js),
+# כך שאין תלות בהגדרת assets. הם נבנים אוטומטית לפני כל deploy.
+[build]
+command = "node scripts/build-pages.js"
 
 # סודות (לא לשמור כאן! להגדיר עם:)
 #   npx wrangler secret put SUPABASE_URL
