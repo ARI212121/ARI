@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>תצוגה חיה - מערכת הצבעות</title>
+<style>
+  :root {
+    --surface: #101014;
+    --surface-2: #1a1a21;
+    --text-1: #ffffff;
+    --text-2: #c3c2c9;
+    --text-3: #8a8994;
+    --accent: #3987e5;
+    --good: #34c26b;
+    --track: #26262e;
+    --s1: #3987e5; --s2: #199e70; --s3: #c98500; --s4: #008300;
+    --s5: #9085e9; --s6: #e66767; --s7: #d55181; --s8: #d95926;
+  }
+  [data-theme="light"] {
+    --surface: #fcfcfb;
+    --surface-2: #f1f1ee;
+    --text-1: #0b0b0b;
+    --text-2: #52514e;
+    --text-3: #83827c;
+    --track: #e6e6e1;
+    --s1: #2a78d6; --s2: #1baf7a; --s3: #eda100; --s4: #008300;
+    --s5: #4a3aa7; --s6: #e34948; --s7: #e87ba4; --s8: #eb6834;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: 'Segoe UI', 'Heebo', Arial, sans-serif;
+    background: var(--surface);
+    color: var(--text-1);
+    overflow: hidden;
+    transition: background .4s, color .4s;
+  }
+  #stage {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 3vh 4vw;
+    transform-origin: top center;
+  }
+
+  header { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+  #system-name { font-size: 1.4rem; color: var(--text-3); font-weight: 500; letter-spacing: .5px; }
+  #timer {
+    font-size: 2.2rem; font-weight: 700; font-variant-numeric: tabular-nums;
+    background: var(--surface-2); border-radius: 14px; padding: 6px 22px; min-width: 130px; text-align: center;
+  }
+  #timer.warn { color: #e66767; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .55; } }
+  #timer.hidden, .hidden { display: none !important; }
+
+  #question {
+    font-size: clamp(2rem, 4.6vw, 4rem);
+    font-weight: 800; text-align: center; line-height: 1.25;
+    margin: 3.5vh 0 1.5vh;
+    text-wrap: balance;
+  }
+  #status-line { text-align: center; color: var(--text-3); font-size: 1.25rem; min-height: 1.8rem; }
+  #status-line .live-dot {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    background: #e34948; margin-inline-start: 8px; animation: pulse 1.4s infinite;
+  }
+
+  #bars { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 2.8vh; }
+  .bar-row { display: grid; grid-template-columns: minmax(140px, 18vw) 1fr auto; align-items: center; gap: 1.6vw; }
+  .bar-label { font-size: clamp(1.2rem, 2.4vw, 2.1rem); font-weight: 700; text-align: start; display: flex; align-items: center; gap: 12px; }
+  .digit-chip {
+    flex: none; width: 2.2em; height: 2.2em; font-size: .62em; border-radius: 12px;
+    display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); font-weight: 800;
+    border: 2px solid var(--track);
+  }
+  .bar-track { background: var(--track); border-radius: 10px; height: clamp(28px, 5.4vh, 56px); overflow: hidden; position: relative; }
+  .bar-fill {
+    height: 100%; width: 0%;
+    border-radius: 0 10px 10px 0; /* קצה מעוגל בצד הצמיחה בלבד (RTL) */
+    transition: width .9s cubic-bezier(.2,.8,.2,1);
+    position: relative;
+  }
+  .bar-num { font-size: clamp(1.3rem, 2.6vw, 2.3rem); font-weight: 800; font-variant-numeric: tabular-nums; min-width: 5.2ch; text-align: end; }
+  .bar-votes { font-size: .55em; color: var(--text-3); font-weight: 500; display: block; }
+  .judge-chips { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+  .judge-chip { font-size: .78rem; background: var(--surface-2); color: var(--text-2); border-radius: 8px; padding: 2px 8px; }
+
+  .bar-row.correct .bar-label::after { content: '✓ תשובה נכונה'; color: var(--good); font-size: .65em; font-weight: 800; }
+  .bar-row.winner .bar-label::after { content: '🏆'; font-size: 1em; }
+  .bar-row.dimmed { opacity: .35; }
+
+  footer { display: flex; justify-content: space-between; align-items: center; color: var(--text-3); font-size: 1.15rem; padding-top: 1.5vh; }
+  #total-votes b { color: var(--text-1); font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+
+  #ticker-wrap { position: fixed; bottom: 0; right: 0; left: 0; background: var(--accent); color: #fff; padding: 10px 0; display: none; }
+  #ticker { display: inline-block; white-space: nowrap; padding-inline-start: 100vw; animation: tick 18s linear infinite; font-size: 1.3rem; font-weight: 600; }
+  @keyframes tick { to { transform: translateX(100%); } } /* RTL: טקסט נכנס משמאל */
+
+  #overlay-msg {
+    position: fixed; inset: 0; display: none; place-items: center;
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    backdrop-filter: blur(6px); z-index: 40;
+    font-size: clamp(2.4rem, 6vw, 5rem); font-weight: 900; text-align: center; padding: 4vw;
+  }
+  #waiting { display: grid; place-items: center; flex: 1; color: var(--text-3); font-size: clamp(1.8rem, 4vw, 3rem); font-weight: 600; text-align: center; }
+  #conn-lost { position: fixed; top: 12px; left: 12px; background: #e34948; color: #fff; border-radius: 10px; padding: 6px 14px; font-size: .95rem; display: none; z-index: 50; }
+  canvas#confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+</style>
+</head>
+<body data-theme="dark">
+<div id="conn-lost">אין חיבור לשרת...</div>
+<div id="stage">
+  <header>
+    <div id="system-name">מערכת הצבעות</div>
+    <div id="timer" class="hidden">--:--</div>
+  </header>
+  <div id="question"></div>
+  <div id="status-line"></div>
+  <div id="bars"></div>
+  <div id="waiting">ממתינים לשאלה הבאה...</div>
+  <footer>
+    <div id="total-votes">סה"כ הצבעות: <b>0</b></div>
+    <div id="judges-weight-note"></div>
+  </footer>
+</div>
+<div id="ticker-wrap"><div id="ticker"></div></div>
+<div id="overlay-msg"></div>
+<canvas id="confetti"></canvas>
+
+<script>
+'use strict';
+/* ============================================================
+   דף צפייה חיה.
+   מקור אמת: /api/public/state (משיכה כל שנייה).
+   שכבת שליטה מקומית: BroadcastChannel מדף השליטה (באותו מחשב),
+   לפעולות מיידיות - חשיפה, קונפטי, שינוי שם, ערכת נושא, זום.
+   ============================================================ */
+
+const SERIES = ['--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8'];
+const $ = (id) => document.getElementById(id);
+
+const local = {           // דריסות מקומיות מדף השליטה
+  nameOverrides: {},      // digit -> שם
+  hideResults: null,      // null=לפי שרת, true/false=כפוי מקומית
+  revealWinner: false,
+  dimLosers: false,
+  zoom: 1,
+};
+let lastState = null;
+let lastFetchOk = Date.now();
+let timerBase = null; // {closesAt, fetchedAt}
+
+/* ---------- תקשורת עם דף השליטה ---------- */
+const bc = ('BroadcastChannel' in window) ? new BroadcastChannel('ari-trivia') : null;
+if (bc) {
+  bc.onmessage = (ev) => handleCommand(ev.data || {});
+  bc.postMessage({ type: 'display_ready' });
+}
+// גיבוי תקשורת: localStorage (עובד גם בלי BroadcastChannel)
+window.addEventListener('storage', (ev) => {
+  if (ev.key === 'ari-trivia-cmd' && ev.newValue) {
+    try { handleCommand(JSON.parse(ev.newValue).cmd); } catch {}
+  }
+});
+
+function handleCommand(cmd) {
+  switch (cmd.type) {
+    case 'ping': bc?.postMessage({ type: 'display_ready' }); break;
+    case 'theme': local.themeForced = true; document.body.dataset.theme = cmd.value; break;
+    case 'zoom':
+      local.zoom = Number(cmd.value) || 1;
+      $('stage').style.transform = `scale(${local.zoom})`;
+      break;
+    case 'rename': local.nameOverrides[cmd.digit] = cmd.name; render(); break;
+    case 'clear_renames': local.nameOverrides = {}; render(); break;
+    case 'hide_results': local.hideResults = cmd.value; render(); break;
+    case 'reveal_winner': local.revealWinner = true; local.dimLosers = !!cmd.dim; render(); confetti(); break;
+    case 'clear_reveal': local.revealWinner = false; local.dimLosers = false; render(); break;
+    case 'confetti': confetti(); break;
+    case 'overlay':
+      $('overlay-msg').textContent = cmd.text || '';
+      $('overlay-msg').style.display = cmd.text ? 'grid' : 'none';
+      break;
+    case 'refresh': fetchState(); break;
+  }
+}
+
+/* ---------- משיכת מצב מהשרת ---------- */
+async function fetchState() {
+  try {
+    const res = await fetch('/api/public/state', { cache: 'no-store' });
+    if (!res.ok) throw new Error(res.status);
+    lastState = await res.json();
+    lastFetchOk = Date.now();
+    $('conn-lost').style.display = 'none';
+    if (lastState.question?.closes_at) {
+      timerBase = {
+        closesAt: new Date(lastState.question.closes_at).getTime(),
+        serverNow: new Date(lastState.server_time).getTime(),
+        fetchedAt: Date.now(),
+      };
+    } else timerBase = null;
+    render();
+  } catch {
+    if (Date.now() - lastFetchOk > 5000) $('conn-lost').style.display = 'block';
+  }
+}
+
+/* ---------- ציור ---------- */
+function render() {
+  if (!lastState) return;
+  const { settings, question, results } = lastState;
+
+  $('system-name').textContent = settings.system_name || '';
+  // ערכת נושא מהשרת אלא אם נכפתה מקומית מדף השליטה
+  if (!local.themeForced) document.body.dataset.theme = settings.display_theme || 'dark';
+
+  // כיתוב רץ
+  const ticker = settings.display_message || '';
+  $('ticker-wrap').style.display = ticker ? 'block' : 'none';
+  $('ticker').textContent = ticker;
+
+  if (!question) {
+    $('question').textContent = '';
+    $('status-line').textContent = '';
+    $('bars').innerHTML = '';
+    $('waiting').style.display = 'grid';
+    $('timer').classList.add('hidden');
+    $('total-votes').querySelector('b').textContent = '0';
+    return;
+  }
+  $('waiting').style.display = 'none';
+  $('question').textContent = question.title;
+
+  const isOpen = question.status === 'active' && (question.seconds_left === null || question.seconds_left > 0);
+  $('status-line').innerHTML = isOpen
+    ? 'ההצבעה פתוחה - חייגו עכשיו <span class="live-dot"></span>'
+    : 'ההצבעה סגורה';
+
+  const hide = local.hideResults !== null ? local.hideResults : (results?.hidden ?? false);
+  const opts = results?.options || (question.options || []).map((o) => ({ ...o, final_pct: null, votes: null }));
+  const maxPct = Math.max(...opts.map((o) => o.final_pct ?? 0), 0.001);
+  const winners = new Set(
+    opts.filter((o) => (o.final_pct ?? 0) >= maxPct - 0.001 && (o.final_pct ?? 0) > 0).map((o) => o.digit),
+  );
+
+  const bars = $('bars');
+  // בנייה מחדש רק אם מבנה האפשרויות השתנה - אחרת עדכון חלק לאנימציה
+  const key = question.id + ':' + opts.map((o) => o.digit).join(',');
+  if (bars.dataset.key !== key) {
+    bars.dataset.key = key;
+    bars.innerHTML = opts.map((o, i) => `
+      <div class="bar-row" data-digit="${o.digit}">
+        <div class="bar-label"><span class="digit-chip">${o.digit}</span><span class="label-text"></span></div>
+        <div class="bar-track"><div class="bar-fill" style="background:${barColor(o, i)}"></div></div>
+        <div class="bar-num"><span class="pct"></span><span class="bar-votes"></span><div class="judge-chips"></div></div>
+      </div>`).join('');
+  }
+
+  opts.forEach((o, i) => {
+    const row = bars.querySelector(`[data-digit="${o.digit}"]`);
+    if (!row) return;
+    row.querySelector('.label-text').textContent = local.nameOverrides[o.digit] ?? o.label;
+    const pct = hide ? null : o.final_pct;
+    row.querySelector('.bar-fill').style.width = pct === null ? '0%' : Math.max(pct, 0.5) + '%';
+    row.querySelector('.pct').textContent = pct === null ? '?' : pct.toFixed(1) + '%';
+    row.querySelector('.bar-votes').textContent = hide || o.votes === null ? '' : `${o.votes} קולות`;
+    const chips = (o.judge_scores || []).map((s) => `<span class="judge-chip">${s.judge}: ${s.score}</span>`).join('');
+    row.querySelector('.judge-chips').innerHTML = hide ? '' : chips;
+
+    row.classList.toggle('correct', !hide && question.correct_digit !== null && Number(question.correct_digit) === Number(o.digit));
+    row.classList.toggle('winner', local.revealWinner && !hide && winners.has(o.digit) && question.correct_digit === null);
+    row.classList.toggle('dimmed', local.dimLosers && !hide && !winners.has(o.digit));
+  });
+
+  $('total-votes').querySelector('b').textContent = hide ? '···' : String(results?.total_votes ?? 0);
+  $('judges-weight-note').textContent = question.judges_weight > 0
+    ? `שקלול: ${question.judges_weight}% שופטים, ${100 - question.judges_weight}% קהל`
+    : '';
+}
+
+function barColor(opt, i) {
+  return opt.color || `var(${SERIES[i % SERIES.length]})`;
+}
+
+/* ---------- טיימר חלק (מתוקן סטיית שעון מול השרת) ---------- */
+setInterval(() => {
+  const t = $('timer');
+  if (!timerBase || !lastState?.question || lastState.question.status !== 'active') {
+    t.classList.add('hidden');
+    return;
+  }
+  const serverNowEst = timerBase.serverNow + (Date.now() - timerBase.fetchedAt);
+  const left = Math.max(0, Math.round((timerBase.closesAt - serverNowEst) / 1000));
+  t.classList.remove('hidden');
+  t.classList.toggle('warn', left <= 15 && left > 0);
+  t.textContent = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
+}, 250);
+
+/* ---------- קונפטי ---------- */
+function confetti() {
+  const canvas = $('confetti');
+  const ctx = canvas.getContext('2d');
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  const colors = SERIES.map((v) => getComputedStyle(document.body).getPropertyValue(v).trim());
+  const parts = Array.from({ length: 180 }, () => ({
+    x: Math.random() * canvas.width, y: -20 - Math.random() * canvas.height * .5,
+    vy: 2 + Math.random() * 4, vx: -2 + Math.random() * 4,
+    size: 6 + Math.random() * 8, color: colors[Math.floor(Math.random() * colors.length)],
+    rot: Math.random() * Math.PI, vr: -.1 + Math.random() * .2,
+  }));
+  const t0 = Date.now();
+  (function frame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const p of parts) {
+      p.x += p.vx; p.y += p.vy; p.rot += p.vr;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.color; ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+      ctx.restore();
+    }
+    if (Date.now() - t0 < 4500) requestAnimationFrame(frame);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+  })();
+}
+
+fetchState();
+setInterval(fetchState, 1000);
+</script>
+</body>
+</html>

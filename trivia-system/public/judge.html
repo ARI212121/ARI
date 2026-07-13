@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>עמדת שופט - מערכת הצבעות</title>
+<style>
+  :root {
+    --surface: #101014; --surface-2: #1a1a21; --surface-3: #23232c;
+    --text-1: #fff; --text-2: #c3c2c9; --text-3: #8a8994;
+    --accent: #3987e5; --good: #34c26b; --bad: #e66767; --track: #26262e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', 'Heebo', Arial, sans-serif; background: var(--surface); color: var(--text-1); min-height: 100vh; padding: 20px; max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 6px; }
+  .muted { color: var(--text-3); font-size: .9rem; }
+  .card { background: var(--surface-2); border-radius: 16px; padding: 20px; margin-top: 16px; }
+  input, button { font: inherit; border-radius: 10px; padding: 12px 14px; border: none; }
+  input { background: var(--surface); color: var(--text-1); border: 1px solid var(--track); width: 100%; margin-bottom: 10px; }
+  input:focus { outline: 2px solid var(--accent); }
+  button { background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; width: 100%; }
+  button.secondary { background: var(--surface-3); }
+  button:disabled { opacity: .4; }
+  .range-badge { display: inline-block; background: color-mix(in srgb, var(--accent) 25%, transparent); color: var(--accent); border-radius: 20px; padding: 4px 16px; font-weight: 700; margin-top: 6px; }
+  .opt-card { background: var(--surface-3); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .opt-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-weight: 700; font-size: 1.1rem; }
+  .score-val { font-size: 1.6rem; font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 800; }
+  input[type=range] { width: 100%; accent-color: var(--accent); height: 34px; margin: 0 0 10px; padding: 0; border: none; background: transparent; }
+  .saved-note { color: var(--good); font-size: .85rem; min-height: 1.2em; }
+  #toast { position: fixed; bottom: 20px; right: 50%; transform: translateX(50%); background: var(--surface-3); border: 1px solid var(--track); border-radius: 12px; padding: 12px 22px; display: none; z-index: 99; font-weight: 600; }
+  #toast.err { border-color: var(--bad); color: var(--bad); }
+</style>
+</head>
+<body>
+<h1>⚖️ עמדת שופט</h1>
+<div class="muted">מתן ציונים בטווח האישי שהוגדר לך מראש</div>
+
+<div class="card" id="login-card">
+  <label class="muted">מספר הטלפון שלך (כפי שהוגדר במערכת)</label>
+  <input id="phone" placeholder="0501234567" inputmode="tel">
+  <label class="muted">קוד אישי (אם הוגדר)</label>
+  <input id="pin" type="password" placeholder="קוד">
+  <button onclick="login()">כניסה</button>
+</div>
+
+<div id="panel" style="display:none">
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <b id="judge-name"></b>
+        <div class="range-badge" id="judge-range"></div>
+      </div>
+      <button class="secondary" style="width:auto" onclick="logout()">יציאה</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="q-title" style="margin-bottom:4px">אין שאלה פעילה</h2>
+    <div class="muted" id="q-meta"></div>
+    <div id="options" style="margin-top:14px"></div>
+  </div>
+
+  <div class="card" id="extend-card" style="display:none">
+    <h3 style="margin-bottom:10px">⏱️ הארכת זמן לכלל המשתמשים</h3>
+    <div style="display:flex;gap:8px">
+      <button class="secondary" onclick="extend(30)">+30 שנ'</button>
+      <button class="secondary" onclick="extend(60)">+60 שנ'</button>
+      <button class="secondary" onclick="extend(120)">+2 דק'</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+let judge = null, question = null, myScores = {}, dirtyDigits = new Set();
+
+const savedAuth = JSON.parse(localStorage.getItem('ari-judge-auth') || 'null');
+if (savedAuth) { $('phone').value = savedAuth.phone; $('pin').value = savedAuth.pin || ''; login(); }
+
+function toast(msg, isErr = false) {
+  const t = $('toast'); t.textContent = msg; t.className = isErr ? 'err' : '';
+  t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 2600);
+}
+
+function authHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-Judge-Phone': $('phone').value.trim(),
+    'X-Judge-Pin': $('pin').value.trim(),
+  };
+}
+async function api(path, method = 'GET', body) {
+  const res = await fetch('/api' + path, { method, headers: authHeaders(), body: body ? JSON.stringify(body) : undefined });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'שגיאה');
+  return data;
+}
+
+async function login() {
+  try {
+    const data = await api('/judge/login', 'POST', {});
+    judge = data.judge;
+    localStorage.setItem('ari-judge-auth', JSON.stringify({ phone: $('phone').value.trim(), pin: $('pin').value.trim() }));
+    $('login-card').style.display = 'none';
+    $('panel').style.display = 'block';
+    $('judge-name').textContent = 'שלום, ' + judge.name;
+    $('judge-range').textContent = `הטווח שלך: ${judge.min_percent}% - ${judge.max_percent}%`;
+    $('extend-card').style.display = judge.can_extend ? 'block' : 'none';
+    refresh();
+    setInterval(refresh, 2500);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+function logout() { localStorage.removeItem('ari-judge-auth'); location.reload(); }
+
+async function refresh() {
+  let data;
+  try { data = await api('/judge/state'); } catch { return; }
+  question = data.question;
+  myScores = Object.fromEntries((data.my_scores || []).map((s) => [s.option_digit, Number(s.score)]));
+
+  if (!question) {
+    $('q-title').textContent = 'אין שאלה פעילה כרגע';
+    $('q-meta').textContent = 'העמוד יתעדכן אוטומטית כשתיפתח שאלה';
+    $('options').innerHTML = '';
+    $('options').dataset.key = '';
+    return;
+  }
+  $('q-title').textContent = question.title;
+  const left = question.seconds_left;
+  $('q-meta').textContent =
+    `משקל השופטים בתוצאה: ${question.judges_weight}%` +
+    (left !== null && left !== undefined ? ` | נותרו ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} להצבעה` : '');
+
+  const container = $('options');
+  if (container.dataset.key !== question.id) {
+    container.dataset.key = question.id;
+    dirtyDigits.clear();
+    container.innerHTML = question.options.map((o) => `
+      <div class="opt-card" data-digit="${o.digit}">
+        <div class="opt-head">
+          <span>${o.digit}. ${escapeHtml(o.label)}</span>
+          <span class="score-val" id="sv-${o.digit}">—</span>
+        </div>
+        <input type="range" id="sl-${o.digit}" min="${judge.min_percent}" max="${judge.max_percent}"
+               value="${myScores[o.digit] ?? Math.round((judge.min_percent + judge.max_percent) / 2)}"
+               oninput="onSlide(${o.digit}, this.value)">
+        <button onclick="submitScore(${o.digit})">שמור ציון</button>
+        <div class="saved-note" id="sn-${o.digit}"></div>
+      </div>`).join('');
+  }
+  // עדכון ציונים שמורים (בלי לדרוס סליידר שבעריכה)
+  for (const o of question.options) {
+    if (!dirtyDigits.has(o.digit) && myScores[o.digit] !== undefined) {
+      $('sl-' + o.digit).value = myScores[o.digit];
+      $('sv-' + o.digit).textContent = myScores[o.digit];
+      $('sn-' + o.digit).textContent = '✓ ציון שמור';
+    } else if (!dirtyDigits.has(o.digit)) {
+      $('sv-' + o.digit).textContent = $('sl-' + o.digit).value;
+    }
+  }
+}
+function onSlide(digit, val) {
+  dirtyDigits.add(digit);
+  $('sv-' + digit).textContent = val;
+  $('sn-' + digit).textContent = '';
+}
+async function submitScore(digit) {
+  try {
+    const score = Number($('sl-' + digit).value);
+    await api('/judge/score', 'POST', { question_id: question.id, option_digit: digit, score });
+    dirtyDigits.delete(digit);
+    $('sn-' + digit).textContent = '✓ ציון שמור';
+    toast('הציון נשמר');
+  } catch (e) { toast(e.message, true); }
+}
+async function extend(seconds) {
+  try { await api('/judge/extend', 'POST', { seconds }); toast(`הזמן הוארך ב-${seconds} שניות`); }
+  catch (e) { toast(e.message, true); }
+}
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+</script>
+</body>
+</html>

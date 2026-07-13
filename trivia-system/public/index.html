@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מערכת הצבעות וטריוויה טלפונית</title>
+<style>
+  :root { --surface:#101014; --surface-2:#1a1a21; --text-1:#fff; --text-3:#8a8994; --accent:#3987e5; --track:#26262e; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Segoe UI','Heebo',Arial,sans-serif; background:var(--surface); color:var(--text-1); min-height:100vh; display:grid; place-items:center; padding:20px; }
+  .wrap { max-width: 760px; width: 100%; text-align: center; }
+  h1 { font-size: 2rem; margin-bottom: 8px; }
+  p { color: var(--text-3); margin-bottom: 30px; }
+  .links { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  a.tile { background: var(--surface-2); border: 1px solid var(--track); border-radius: 18px; padding: 26px 18px; color: var(--text-1); text-decoration: none; transition: transform .15s, border-color .15s; }
+  a.tile:hover { transform: translateY(-3px); border-color: var(--accent); }
+  .emoji { font-size: 2.2rem; display: block; margin-bottom: 10px; }
+  .tile b { display: block; margin-bottom: 4px; font-size: 1.1rem; }
+  .tile span.desc { color: var(--text-3); font-size: .85rem; }
+  #status { margin-top: 26px; color: var(--text-3); font-size: .9rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>📞 מערכת הצבעות וטריוויה טלפונית</h1>
+  <p>ימות המשיח · Cloudflare Workers · Supabase — הצבעות חיות, שופטים, סקרים ותצוגה בזמן אמת</p>
+  <div class="links">
+    <a class="tile" href="admin.html"><span class="emoji">⚙️</span><b>ממשק ניהול</b><span class="desc">שאלות, שופטים, משתתפים והגדרות</span></a>
+    <a class="tile" href="control.html"><span class="emoji">🎛️</span><b>שולחן שליטה</b><span class="desc">שליטה חיה + פתיחת חלון התצוגה</span></a>
+    <a class="tile" href="display.html"><span class="emoji">🖥️</span><b>תצוגה חיה</b><span class="desc">מסך תוצאות באחוזים לקהל</span></a>
+    <a class="tile" href="judge.html"><span class="emoji">⚖️</span><b>עמדת שופט</b><span class="desc">מתן ציונים בטווח אישי</span></a>
+  </div>
+  <div id="status">בודק חיבור לשרת...</div>
+</div>
+<script>
+fetch('/api/public/state').then(r => r.json()).then(s => {
+  document.getElementById('status').textContent = s.question
+    ? `✓ מחובר · שאלה פעילה: "${s.question.title}"`
+    : '✓ מחובר · אין שאלה פעילה כרגע';
+}).catch(() => document.getElementById('status').textContent = '✕ אין חיבור ל-API - בדקו הגדרות סודות ב-Cloudflare');
+</script>
+</body>
+</html>
