@@ -11,6 +11,19 @@ import { handleIvrCall } from './ivr.js';
 import { handleApi } from './api.js';
 import { createDb } from './db.js';
 import { parseYemotParams, ivrResponse, playAndHangup, ttsMsg } from './yemot.js';
+import { PAGES } from './pages.generated.js';
+
+const PAGE_MIME = { '.html': 'text/html; charset=utf-8' };
+
+function servePage(pathname) {
+  let name = pathname.replace(/^\/+/, '');
+  if (name === '' || name === '/') name = 'index.html';
+  const html = PAGES[name];
+  if (html === undefined) return null;
+  return new Response(html, {
+    headers: { 'Content-Type': PAGE_MIME['.html'], 'Cache-Control': 'no-cache' },
+  });
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -36,12 +49,17 @@ export default {
       });
     }
 
-    // קבצים סטטיים
+    // דפי הממשקים - מוטמעים בתוך ה-Worker (ללא תלות בהגדרת assets)
+    const page = servePage(url.pathname);
+    if (page) return page;
+
+    // גיבוי: אם בכל זאת מוגדר assets binding, ננסה אותו
     if (env.ASSETS) {
       return env.ASSETS.fetch(request);
     }
-    return new Response('trivia-system worker פעיל. הגדירו assets לקבלת הממשקים.', {
-      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+
+    return new Response('לא נמצא', {
+      status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
   },
 };
