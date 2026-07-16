@@ -10,6 +10,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn app:app --timeout 120 --workers 1
     envVars:
+      - key: PYTHON_VERSION       # SpeechRecognition דורש פייתון <=3.12 (המודול aifc הוסר ב-3.13+)
+        value: 3.11.9
       - key: YEMOT_TOKEN          # "מספר-מערכת:סיסמה" – חובה
         sync: false
       - key: YEMOT_OUTPUT_PATH    # לאן לשמור את קובץ הטקסט, למשל ivr2:/5/000.tts
