@@ -1,0 +1,28 @@
+name: keep-render-awake
+
+# שומר על שרת ה-Render "ער" כדי שלא יירדם אחרי 15 דקות של חוסר פעילות.
+# רץ בענן של גיטהאב – לא צריך מחשב פתוח ולא תוכנה מותקנת.
+#
+# הגדרה חד-פעמית:
+#   Settings -> Secrets and variables -> Actions -> Variables -> New repository variable
+#   שם:  RENDER_URL
+#   ערך: כתובת השרת שלך מ-Render, למשל  https://yemot-transcription.onrender.com
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # כל 10 דקות
+  workflow_dispatch: {}       # מאפשר גם הרצה ידנית מלשונית Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the Render service
+        run: |
+          URL="${{ vars.RENDER_URL }}"
+          if [ -z "$URL" ]; then
+            echo "לא הוגדר משתנה RENDER_URL – ראו את ההוראות בראש הקובץ."
+            exit 0
+          fi
+          echo "Pinging $URL ..."
+          curl -fsS --max-time 60 "$URL" && echo "" && echo "OK" || echo "Ping failed (השרת אולי מתעורר) – ננסה שוב בפעם הבאה."

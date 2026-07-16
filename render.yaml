@@ -1,0 +1,22 @@
+# Render Blueprint – פריסה אוטומטית של שרת התמלול.
+# ב-Render בוחרים New -> Blueprint, מחברים את הריפו, והוא קורא את הקובץ הזה.
+# את הערכים הרגישים (הטוקן וכו') מזינים ידנית בלוח הבקרה של Render (sync: false).
+services:
+  - type: web
+    name: yemot-transcription
+    runtime: python
+    plan: free
+    rootDir: transcription-server
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --timeout 120 --workers 1
+    envVars:
+      - key: YEMOT_TOKEN          # "מספר-מערכת:סיסמה" – חובה
+        sync: false
+      - key: YEMOT_OUTPUT_PATH    # לאן לשמור את קובץ הטקסט, למשל ivr2:/5/000.tts
+        sync: false
+      - key: YEMOT_REC_FOLDER     # אופציונלי – תיקיית ההקלטות, למשל ivr2:/4
+        sync: false
+      - key: YEMOT_NEXT_EXT       # אופציונלי – לאן לעבור אחרי התמלול, למשל /6
+        sync: false
+      - key: YEMOT_LANG           # אופציונלי – שפת תמלול, ברירת מחדל he-IL
+        sync: false
